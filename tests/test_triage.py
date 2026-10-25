@@ -15,10 +15,12 @@ import httpx
 from fastapi.testclient import TestClient
 
 from app.agent import doctors, triage
+from app.services import doctors as stored_doctors
 from app.agent.context import build_context
 from app.agent.intake import EMERGENCY_REPLY
 from app.core import db, llm
 from app.main import app
+from helpers import as_patient, patient_of, register_patient
 
 VALID = {
     "specialty_code": "internal_medicine", "urgency": "soon",
@@ -48,7 +50,7 @@ class DoctorTests(unittest.TestCase):
             ("specialty_code", "unknown"), ("specialty_code", []),
             ("score", -1), ("score", 6), ("score", True), ("score", "4"),
             ("score", float("nan")), ("score", float("inf")),
-            ("online", 1), ("expertise", []), ("expertise", ["", "private-document"]),
+            ("expertise", []), ("expertise", ["", "private-document"]),
             ("expertise", "private-document"), ("expertise", [None, "value"]),
         ):
             document = copy.deepcopy(original)
@@ -85,15 +87,23 @@ class DoctorTests(unittest.TestCase):
                 doctors.load_file(Path("doctors.json"))
 
     def test_filter_online_score_sort_and_ten_limit(self):
-        template = doctors.load_doctors()["doctors"][0]
-        entries = [
-            {**template, "id": f"synthetic_{index}", "online": index % 2 == 0, "score": 3.8 + index / 100}
-            for index in range(12)
-        ] + [{**template, "id": "other", "specialty_code": "pediatrics"}]
-        with patch.object(doctors, "load_doctors", return_value={"doctors": entries}):
-            result = doctors.for_specialty("general_practice")
+        with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, {"APP_DB_PATH": str(Path(directory) / "doctors.db")}):
+            entries = [
+                {"id": f"synthetic_{index}", "name_fa": "synthetic", "expertise": ["one", "two"],
+                 "online": index % 2 == 0, "score": 3.8 + index / 100}
+                for index in range(12)
+            ]
+            with closing(db.connect()) as connection, connection:
+                for doctor in entries:
+                    connection.execute(
+                        """INSERT INTO doctors(id,name_fa,specialty_code,expertise,score,verified,last_seen_at,created_at)
+                           VALUES (?,?,'general_practice',?,?,1,?,?)""",
+                        (doctor["id"], doctor["name_fa"], json.dumps(doctor["expertise"]), doctor["score"],
+                         db.utc_now() if doctor["online"] else None, db.utc_now()),
+                    )
+            result = stored_doctors.for_specialty("general_practice")
         self.assertEqual(len(result), 10)
-        self.assertEqual(result, sorted(entries[:-1], key=lambda item: (not item["online"], -item["score"]))[:10])
+        self.assertEqual(result, sorted(entries, key=lambda item: (not item["online"], -item["score"]))[:10])
 
     def test_invalid_doctor_file_stops_startup(self):
         doctors.load_doctors.cache_clear()
@@ -113,9 +123,18 @@ class TriageTests(unittest.TestCase):
             "APP_LLM_MODEL": "", "APP_LLM_API_KEY": "", "APP_LLM_TIMEOUT_SECONDS": "30",
         }))
         self.client = self.enterContext(TestClient(app))
+        self.user = register_patient(self.client)
+
+    def create(self, patient_id=None):
+        if patient_id is None:
+            self.user = register_patient(self.client)
+        else:
+            as_patient(self.client, patient_id)
+            self.user["patient_id"] = patient_id
+        return self.client.post("/v1/chat/sessions").json()
 
     def complete(self, patient_id=None):
-        state = self.client.post("/v1/chat/sessions", json={"patient_id": patient_id}).json()
+        state = self.create(patient_id)
         path = f"/v1/chat/sessions/{state['session_id']}/messages"
         if state["step"] == "profile":
             self.client.post(path, json={"message": "no"})
@@ -162,7 +181,7 @@ class TriageTests(unittest.TestCase):
         self.assertEqual(body["reason"], VALID["reason_fa"])
         self.assertEqual(body["notice"], triage.NOTICE)
         self.assertEqual(set(body), {"session_id", "source", "specialty", "urgency", "emergency", "reason", "notice", "doctors"})
-        expected = doctors.for_specialty("internal_medicine")
+        expected = stored_doctors.for_specialty("internal_medicine")
         self.assertEqual([item["id"] for item in body["doctors"]], [item["id"] for item in expected])
         self.assertNotIn("doctor_summary_fa", response.text)
         self.assertNotIn("considerations_fa", response.text)
@@ -176,7 +195,7 @@ class TriageTests(unittest.TestCase):
         self.assertEqual(messages[0], {"role": "system", "content": triage.SYSTEM_PROMPT})
         context = json.loads(messages[1]["content"])
         self.assertEqual(context["current"]["symptoms"], "cough")
-        for identifier in (state["session_id"], state["patient_id"]):
+        for identifier in (state["session_id"], patient_of(state)):
             self.assertNotIn(identifier, json.dumps(context))
 
     def test_invalid_provider_fields_all_fall_back(self):
@@ -333,7 +352,7 @@ class TriageTests(unittest.TestCase):
     def test_delete_patient_cascades_triage(self):
         state = self.complete()
         self.assert_fallback(self.client.post(self.endpoint(state)))
-        self.assertEqual(self.client.delete(f"/v1/patients/{state['patient_id']}").status_code, 204)
+        self.assertEqual(self.client.delete("/v1/me").status_code, 204)
         with closing(db.connect()) as connection:
             self.assertEqual(connection.execute("SELECT COUNT(*) FROM triage_results").fetchone()[0], 0)
 
@@ -377,7 +396,7 @@ class TriageTests(unittest.TestCase):
     def test_deletion_during_provider_call_does_not_recreate_data(self):
         state = self.complete()
         def complete(settings, messages):
-            self.client.delete(f"/v1/patients/{state['patient_id']}")
+            self.client.delete("/v1/me")
             return VALID
         with self.configured(), patch.object(llm, "chat_completion", side_effect=complete):
             self.assertEqual(self.client.post(self.endpoint(state)).status_code, 404)
@@ -390,7 +409,7 @@ class TriageTests(unittest.TestCase):
             connection.execute("DROP TABLE triage_results")
             connection.execute("PRAGMA user_version=1")
         with closing(db.connect()) as connection:
-            self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 2)
+            self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 3)
             self.assertEqual(connection.execute("SELECT age FROM sessions WHERE id=?", (state["session_id"],)).fetchone()[0], 30)
             self.assertEqual(connection.execute("SELECT COUNT(*) FROM triage_results").fetchone()[0], 0)
 
@@ -399,17 +418,17 @@ class TriageTests(unittest.TestCase):
         patient_id = None
         for day in range(20, 25):
             state = self.complete(patient_id)
-            patient_id = state["patient_id"]
+            patient_id = patient_of(state)
             visits.append(state)
             with closing(db.connect()) as connection, connection:
                 connection.execute("UPDATE sessions SET created_at=? WHERE id=?", (f"2026-10-{day}T12:00:00+00:00", state["session_id"]))
         self.client.post(self.endpoint(visits[-1]))
-        incomplete = self.client.post("/v1/chat/sessions", json={"patient_id": patient_id}).json()
+        incomplete = self.create(patient_id)
         path = f"/v1/chat/sessions/{incomplete['session_id']}/messages"
         self.client.post(path, json={"message": "no"})
         self.client.post(path, json={"message": "30"})
         self.client.post(path, json={"message": "chest pain"})
-        unfinished = self.client.post("/v1/chat/sessions", json={"patient_id": patient_id}).json()
+        unfinished = self.create(patient_id)
         with closing(db.connect()) as connection, connection:
             for excluded in (incomplete, unfinished):
                 connection.execute("UPDATE sessions SET created_at='2026-10-24T20:00:00+00:00' WHERE id=?", (excluded["session_id"],))
@@ -434,7 +453,7 @@ class TriageTests(unittest.TestCase):
         serialized = json.dumps(context)
         for session in visits + [current, other, incomplete]:
             self.assertNotIn(session["session_id"], serialized)
-            self.assertNotIn(session["patient_id"], serialized)
+            self.assertNotIn(patient_of(session), serialized)
         for forbidden in ("patient_id", "session_id", "created_at", "messages", "doctor_summary_fa", "considerations_fa"):
             self.assertNotIn(forbidden, serialized)
         with closing(db.connect()) as connection:

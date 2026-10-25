@@ -17,6 +17,7 @@ from app.core import db
 from app.agent import dictionaries, sessions
 from app.core.config import Settings
 from app.main import app
+from helpers import as_patient, patient_of, register_patient
 
 
 class PersistenceTests(unittest.TestCase):
@@ -24,12 +25,13 @@ class PersistenceTests(unittest.TestCase):
         self.db_path = Path(self.enterContext(tempfile.TemporaryDirectory())) / "test.db"
         self.enterContext(patch.dict(os.environ, {"APP_DB_PATH": str(self.db_path)}))
         self.client = self.enterContext(TestClient(app))
+        self.user = register_patient(self.client)
 
     def create(self, patient_id=None):
-        response = (
-            self.client.post("/v1/chat/sessions")
-            if patient_id is None else self.client.post("/v1/chat/sessions", json={"patient_id": patient_id})
-        )
+        if patient_id is not None and self.user["patient_id"] != patient_id:
+            as_patient(self.client, patient_id)
+            self.user["patient_id"] = patient_id
+        response = self.client.post("/v1/chat/sessions")
         self.assertEqual(response.status_code, 201)
         return response.json()
 
@@ -59,7 +61,7 @@ class PersistenceTests(unittest.TestCase):
         self.assertNotIn("returning_profile", state)
         with closing(db.connect()) as connection:
             row = connection.execute("SELECT * FROM sessions WHERE id=?", (state["session_id"],)).fetchone()
-            self.assertEqual(row["patient_id"], state["patient_id"])
+            self.assertEqual(row["patient_id"], patient_of(state))
             self.assertEqual(row["age"], 30)
             self.assertEqual(row["symptoms"], "cough")
             self.assertEqual(json.loads(row["symptom_codes"]), ["cough"])
@@ -74,11 +76,11 @@ class PersistenceTests(unittest.TestCase):
             for value in (row["created_at"], row["updated_at"], messages[0]["created_at"]):
                 self.assertEqual(datetime.fromisoformat(value).utcoffset(), timedelta(0))
             self.assertEqual(connection.execute("PRAGMA foreign_keys").fetchone()[0], 1)
-            self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 2)
+            self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 3)
 
     def test_returning_profile_yes_prefills_and_skips_questions(self):
         first = self.complete(allergies="synthetic allergy")
-        state = self.create(first["patient_id"])
+        state = self.create(patient_of(first))
         self.assertTrue(state["returning"])
         self.assertEqual(state["step"], "profile")
         self.assertEqual(state["collected"], {
@@ -104,7 +106,7 @@ class PersistenceTests(unittest.TestCase):
 
     def test_profile_no_discards_prefill_and_runs_full_intake(self):
         previous = self.complete()
-        state = self.create(previous["patient_id"])
+        state = self.create(patient_of(previous))
         state = self.message(state, "خیر")
         self.assertEqual(state["step"], "age")
         self.assertTrue(all(value is None for value in state["collected"].values()))
@@ -118,7 +120,7 @@ class PersistenceTests(unittest.TestCase):
         self.assertTrue(state["done"])
         self.assertEqual(state["collected"]["age"], 45)
         self.assertEqual(state["collected"]["medications"], "ibuprofen")
-        latest = self.create(previous["patient_id"])
+        latest = self.create(patient_of(previous))
         self.assertEqual(latest["collected"]["age"], 45)
         self.assertEqual(latest["collected"]["medications"], "ibuprofen")
 
@@ -130,7 +132,7 @@ class PersistenceTests(unittest.TestCase):
                 if emergency:
                     state = self.message(state, "CHEST PAIN")
                     self.assertTrue(state["emergency"])
-                new = self.create(state["patient_id"])
+                new = self.create(patient_of(state))
                 self.assertFalse(new["returning"])
                 self.assertEqual(new["step"], "age")
                 self.assertTrue(all(value is None for value in new["collected"].values()))
@@ -155,19 +157,19 @@ class PersistenceTests(unittest.TestCase):
     def test_completed_session_never_changes_or_appends_messages(self):
         state = self.complete()
         before = dict(self.row(state["session_id"]))
-        history_before = self.client.get(f"/v1/patients/{state['patient_id']}/history").json()
+        history_before = self.client.get("/v1/me/history").json()
         self.assertEqual(self.message(state, "ignored synthetic answer"), state)
         self.assertEqual(dict(self.row(state["session_id"])), before)
-        self.assertEqual(self.client.get(f"/v1/patients/{state['patient_id']}/history").json(), history_before)
-        self.create(state["patient_id"])
+        self.assertEqual(self.client.get("/v1/me/history").json(), history_before)
+        self.create(patient_of(state))
         self.assertEqual(self.message(state, "ignored again"), state)
 
     def test_history_order_limit_messages_and_unknown_patient(self):
         state = self.complete()
         ids = [state["session_id"]]
         for _ in range(11):
-            ids.append(self.create(state["patient_id"])["session_id"])
-        path = f"/v1/patients/{state['patient_id']}/history"
+            ids.append(self.create(patient_of(state))["session_id"])
+        path = "/v1/me/history"
         response = self.client.get(path)
         self.assertEqual(response.status_code, 200)
         self.assertEqual([visit["session_id"] for visit in response.json()], list(reversed(ids))[:10])
@@ -187,7 +189,7 @@ class PersistenceTests(unittest.TestCase):
         loaded["symptoms"] = [entry for entry in loaded["symptoms"] if entry["code"] != "cough"]
         loaded["medicines"] = [entry for entry in loaded["medicines"] if entry["code"] != "acetaminophen"]
         with patch.object(dictionaries, "load_dictionaries", return_value=loaded):
-            response = self.client.get(f"/v1/patients/{state['patient_id']}/history")
+            response = self.client.get("/v1/me/history")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()[0]["matched"], {
             "symptoms": [{"code": "cough", "name_fa": "cough"}],
@@ -196,32 +198,32 @@ class PersistenceTests(unittest.TestCase):
 
     def test_delete_cascades_and_unknown_ids_return_404(self):
         state = self.complete()
-        self.create(state["patient_id"])
-        response = self.client.delete(f"/v1/patients/{state['patient_id']}")
+        self.create(patient_of(state))
+        response = self.client.delete("/v1/me")
         self.assertEqual(response.status_code, 204)
         self.assertEqual(response.content, b"")
         with closing(db.connect()) as connection:
             for table in ("patients", "sessions", "messages"):
                 self.assertEqual(connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0], 0)
-        self.assertEqual(self.client.delete(f"/v1/patients/{state['patient_id']}").status_code, 404)
-        self.assertEqual(self.client.get(f"/v1/patients/{state['patient_id']}/history").status_code, 404)
+        self.assertEqual(self.client.delete("/v1/me").status_code, 401)
+        self.assertEqual(self.client.get("/v1/me/history").status_code, 401)
         self.assertEqual(self.client.post(
             f"/v1/chat/sessions/{state['session_id']}/messages", json={"message": "synthetic"}
-        ).status_code, 404)
+        ).status_code, 401)
 
-    def test_unknown_patient_and_invalid_creation_body(self):
-        response = self.client.post("/v1/chat/sessions", json={"patient_id": "unknown"})
-        self.assertEqual(response.status_code, 404)
-        for patient_id in ("x" * 65, 42):
+    def test_old_patient_routes_removed_and_creation_body_rejected(self):
+        self.assertEqual(self.client.get("/v1/patients/unknown/history").status_code, 404)
+        self.assertEqual(self.client.delete("/v1/patients/unknown").status_code, 404)
+        for patient_id in ("unknown", "x" * 65, 42, None):
             response = self.client.post("/v1/chat/sessions", json={"patient_id": patient_id})
             self.assertEqual(response.status_code, 422)
         self.assertEqual(self.client.post("/v1/chat/sessions").status_code, 201)
-        self.assertEqual(self.client.post("/v1/chat/sessions", json={"patient_id": None}).status_code, 201)
 
     def test_connection_path_is_read_fresh_without_lifespan(self):
         alternate = self.db_path.with_name("alternate.db")
         with patch.dict(os.environ, {"APP_DB_PATH": str(alternate)}):
             with TestClient(app) as client:
+                register_patient(client)
                 self.assertEqual(client.post("/v1/chat/sessions").status_code, 201)
             with closing(db.connect()) as connection:
                 self.assertEqual(connection.execute("SELECT COUNT(*) FROM patients").fetchone()[0], 1)
@@ -229,6 +231,7 @@ class PersistenceTests(unittest.TestCase):
         self.addCleanup(bare.close)
         untouched = self.db_path.with_name("no-lifespan.db")
         with patch.dict(os.environ, {"APP_DB_PATH": str(untouched)}):
+            register_patient(bare)
             self.assertEqual(bare.post("/v1/chat/sessions").status_code, 201)
         self.assertTrue(untouched.exists())
         with patch.dict(os.environ, {"APP_DB_PATH": " "}):
@@ -244,11 +247,11 @@ class PersistenceTests(unittest.TestCase):
             opened.append(connection)
             return connection
         with patch.object(db, "connect", side_effect=track):
-            state = self.create()
+            state = self.create(self.user["patient_id"])
             self.message(state, "30")
-            self.client.get(f"/v1/patients/{state['patient_id']}/history")
-            self.client.delete(f"/v1/patients/{state['patient_id']}")
-        self.assertEqual(len(opened), 4)
+            self.client.get("/v1/me/history")
+            self.client.delete("/v1/me")
+        self.assertEqual(len(opened), 9)
         for connection in opened:
             with self.assertRaises(sqlite3.ProgrammingError):
                 connection.execute("SELECT 1")
@@ -276,13 +279,16 @@ class PersistenceTests(unittest.TestCase):
         with closing(db.connect()) as connection:
             self.assertEqual(connection.execute("SELECT COUNT(*) FROM messages").fetchone()[0], 1)
 
-    def test_failed_creation_rolls_back_patient_and_session(self):
+    def test_failed_creation_rolls_back_session_without_changing_account(self):
+        with closing(db.connect()) as connection:
+            before = {table: connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+                      for table in ("patients", "users", "auth_sessions", "sessions", "messages")}
         with patch.object(db, "add_message", side_effect=sqlite3.OperationalError("synthetic failure")):
             response = self.client.post("/v1/chat/sessions")
         self.assertEqual(response.status_code, 500)
         with closing(db.connect()) as connection:
-            for table in ("patients", "sessions", "messages"):
-                self.assertEqual(connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0], 0)
+            after = {table: connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0] for table in before}
+        self.assertEqual(after, before)
 
     def test_concurrent_messages_are_serialized(self):
         state = self.create()
@@ -296,8 +302,9 @@ class PersistenceTests(unittest.TestCase):
         self.assertTrue(logging.getLogger("uvicorn.access").disabled)
 
     def test_initialization_failure_closes_connection(self):
-        with patch.object(db, "SCHEMA", "invalid synthetic SQL"):
+        fresh = self.db_path.with_name("initialization-failure.db")
+        with patch.dict(os.environ, {"APP_DB_PATH": str(fresh)}), patch.object(db, "SCHEMA", "invalid synthetic SQL"):
             with self.assertRaises(sqlite3.Error):
                 db.connect()
-        self.db_path.unlink()
-        self.assertFalse(self.db_path.exists())
+        fresh.unlink()
+        self.assertFalse(fresh.exists())

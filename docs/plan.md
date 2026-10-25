@@ -1,6 +1,6 @@
 # Healthcare Agent: Implementation Plan and Specification
 
-Status: Slices 1a, 2a, 2b, and 3 approved. Scripted intake, Persian demo, JSON vocabulary matching, and SQLite patient memory, and optional AI specialty triage are in scope; future workflow decisions remain proposals.
+Status: Slices 1a, 2a, 2b, 3, and 4 approved. Scripted intake, Persian demo, JSON vocabulary matching, and SQLite patient memory, and optional AI specialty triage are in scope; future workflow decisions remain proposals.
 
 ## 1. Purpose
 
@@ -14,7 +14,7 @@ at a time, with an explicit API contract and a runnable check for its behavior.
 - `GET /health` returns HTTP 200 with JSON `{"status": "ok"}`.
 - The health endpoint checks application responsiveness only.
 - FastAPI exposes interactive API documentation at `/docs`.
-- The app implements scripted intake, JSON vocabulary, SQLite patient memory, and optional AI specialty triage; no authentication, patient-facing diagnosis, booking, or treatment advice.
+- The app implements scripted intake, JSON vocabulary, SQLite patient memory, optional AI specialty triage, demo patient/doctor accounts and broadcast visit requests; no patient-facing diagnosis, direct chat, prescription or appointment scheduling.
 - `src/app/core/config.py` defines frozen settings read from `os.environ`. `APP_LOG_LEVEL` defaults to `INFO`; INFO, WARNING, ERROR, and CRITICAL are accepted (case insensitive). Invalid values fail startup. The application does not load `.env` files.
 
 ## 3. Project boundaries
@@ -22,11 +22,13 @@ at a time, with an explicit API contract and a runnable check for its behavior.
 - Put application code in `src/`, runnable checks in `tests/`, and specifications
   and project documentation in `docs/`.
 - Do not create additional folders without the user's permission.
-- The user approved `src/app/`, `src/app/api/`, `src/app/schemas/`, `src/app/agent/`, `src/app/static/`, `src/app/data/`, and `src/app/core/`.
-- `models/` and `services/` are proposed only for when needed; creating them requires permission.
+- The user approved `src/app/`, `src/app/api/`, `src/app/schemas/`, `src/app/agent/`, `src/app/static/`, `src/app/data/`, `src/app/core/`, and `src/app/services/`.
+- `services/` is approved for Slice 4 accounts, doctors and visits; `models/` remains proposed and requires permission.
 - Reuse existing code, standard library features, and installed dependencies first.
 - Add no speculative abstractions, integrations, or infrastructure.
 - Keep this plan consistent with implemented behavior; label proposed behavior clearly.
+
+- Slice 4 below supersedes earlier slice descriptions for identity, ownership, doctor storage/presence, route/response changes and schema version. Earlier entries remain a historical record. Only src/app/services/ was newly approved.
 
 ## 4. Decisions for persistence and future slices
 
@@ -192,6 +194,25 @@ Complete this section for each agreed feature before writing its code:
 - **Demo:** automatically request triage after non-emergency completion; show loading, Persian specialty/urgency/reason/notice and fictional doctor cards with expertise, online state and Persian scores. Show retry after request failure; render using textContent.
 - **Acceptance examples:** no provider produces stored general-practice fallback and doctors; valid mocked output persists and selects sorted doctors; invalid specialty/JSON/timeout falls back; emergency urgency has no doctors; repeated calls after an LLM result avoid provider I/O; fallback then success upgrades the row, failed retries preserve it, unconfigured fallback makes no call, and concurrent first calls keep one row; patient deletion cascades; another connection can BEGIN IMMEDIATE during the provider call.
 - **Runnable check:** unittest discovery with temporary databases and httpx.MockTransport, plus a completed synthetic /demo intake without a provider. Attempt real-provider verification only when configured; otherwise explicitly report it unverified.
+
+
+### Feature: Slice 4 - demo accounts, doctor dashboard and broadcast visit requests
+
+- **Status:** approved.
+- **User outcome:** synthetic patients and doctors self-register with username/password; patients request a visit after triage and the first available verified doctor of that specialty accepts it.
+- **Scope:** one new approved folder src/app/services/ containing accounts.py, doctors.py and visits.py. Keep existing modules in place. Standard-library scrypt and opaque cookie sessions; no new dependencies, chat, prescriptions or admin role.
+- **API contract:** public /health, /docs, dictionaries, GET /v1/specialties and /login, /demo, /doctor pages. POST /v1/auth/register (201), POST /v1/auth/login (200), POST /v1/auth/logout (204) and GET /v1/auth/me require a valid cookie; register/login/me return the named user projection. Patient-role chat endpoints use cookie ownership with no session-creation body or patient_id response field; replace old patient-id routes with GET /v1/me/history and DELETE /v1/me. Patient visit requests: POST/GET /v1/visit-requests, POST /v1/visit-requests/{id}/cancel. Verified doctor endpoints: PUT /v1/doctor/availability, GET /v1/doctor/requests?status=pending|accepted (omission returns both), POST /v1/doctor/requests/{id}/accept. Shared ErrorResponse for 401/403/404/409/422/429.
+- **Validation:** role-discriminated registration forbids extra fields. Lowercase username matches ^[a-z0-9_.-]{3,32}$; password 8-128, name_fa 2-60, specialty in SpecialtyCode, expertise 2-3 strings of 2-40 chars. Seed ids reserved, duplicates 409. Client-supplied verified/score/available rejected. Unverified doctors can log in but receive 403 on every doctor data endpoint.
+- **Agent behavior:** preserve intake and retryable triage. Doctor lists read verified database rows, computed online state, online-first/score-descending/NULL-last/name ordering, maximum ten. A visit request requires owned non-emergency completed intake, non-emergency stored triage, an online doctor of that specialty and no pending/accepted request for the session. Pending requests broadcast to available verified doctors of the specialty; acceptance is one guarded atomic UPDATE so exactly one doctor wins.
+- **Failure behavior:** unknown/not-owned resources 404; unmet visit rules, unavailable doctor, expired/already-claimed/cancelled requests 409. Distinguish creation-rule conflicts using safe error codes. Expire pending requests older than APP_REQUEST_TTL_MINUTES at the start of each visit-request operation. Statuses: pending, accepted, cancelled, expired; cancel pending only. Partial unique index enforces one active request per session. Throttle five failed logins per lowercased username in fifteen minutes, 429 with Retry-After; success clears failures. Bounded per-process memory (10000 keys).
+- **Access and data handling:** synthetic data only and demo-grade authentication. Scrypt n=2**14/r=8/p=1 with sixteen-byte random salt and constant-time digest comparison; dummy hash for unknown users. Random token_urlsafe(32) cookies, SHA-256 hashes only in SQLite. HttpOnly/SameSite=Lax/Path=/ and TTL Max-Age, optional Secure. SameSite=Lax supplies the requested demo CSRF defense; no cross-origin access is enabled. GET doctor requests explicitly updates presence and visit-request GET lists persist derived expiry as the requested GET side effects; no GET changes availability, request acceptance or account state. All /v1 responses carry Cache-Control: no-store. No password/token/cookie/username logging.
+- **Visibility:** pending doctor items expose only request id/status/date/specialty/urgency and preview age/symptoms/duration/severity, with patient/previous_visits/ai null. Only the accepting doctor gets current intake with matched names, up to three previous visits and AI source/summary/considerations, using build_context. Never expose patient ids or usernames in doctor responses. AI notice is fixed Persian: generated, unverified, not a diagnosis, clinician review only.
+- **Configuration:** APP_COOKIE_SECURE=false; APP_SESSION_TTL_HOURS=12 (1-168); optional APP_DEMO_DOCTOR_PASSWORD (8-128, excluded from repr); APP_DOCTOR_AUTO_VERIFY=false; APP_REQUEST_TTL_MINUTES=30 (1-1440). Invalid values name only the variable. No .env loading. Schema v3 adds users, doctors, auth_sessions and visit_requests with foreign-key cascades and required indexes/checks. connect enables foreign_keys and secure_delete and runs schema only below version 3; no migrations framework until a real column change.
+- **Seed/presence:** doctors.json becomes seed/catalog data with no online field. Startup upserts fictional doctors verified while preserving existing user_id. Optional demo password creates/refreshes seed doctor accounts whose usernames equal seed ids; without it no seed accounts are created and one safe disabled-logins line is logged. Online means available and verified with last_seen_at within 45 seconds. Seed doctors start offline until dashboards poll; this is single-process SQLite with polling-based presence.
+- **Demo:** Persian RTL self-contained login/register tabs and role-specific doctor fields; synthetic-only notice and password autocomplete. Doctor dashboard availability/logout, verification waiting banner, queue previews, accepted details/history/AI box, 409 handling, ten-second visibility-aware polling. Patient demo uses cookie auth, no localStorage patient handle, logout/delete-account, owned history, nullable doctor scores, one broadcast-request button disabled with explanation when no listed doctor is online, and own request status/cancel/accepted-doctor/re-request panel with ten-second pending polling.
+- **Acceptance examples:** two online verified doctors see the same preview; concurrent accepts produce one 200 and one 409; the losing queue clears and the patient sees the winner. Different specialty/owner cannot access the request; full details appear only to the accepting doctor. Expired/cancelled requests allow a new request. Patient deletion cascades through users/tokens/intakes/requests. Unverified doctors never count as online.
+- **Runnable check:** run unittest discovery before and after with temporary databases and no provider network; register/login helpers use TestClient cookies and preserve existing behavioral assertions. Cover security, config, seed idempotency, auth/roles/ownership, time-controlled presence/expiry, request guards/atomic acceptance/detail isolation, cascades, no-store and pages. Reinstall, run Uvicorn with APP_DOCTOR_AUTO_VERIFY=true, and exercise two doctor browser sessions and one patient session; report automated/manual limits.
+- **NOT implemented:** admin approval of doctors, doctor credential checks, doctor account deletion, ratings/reviews, password reset, email verification, MFA, audit log, general rate limiting, HTTPS enforcement, chat or prescriptions. Existing real-data/provider prerequisites remain required.
 
 ## 6. Coding and verification rules
 
@@ -475,3 +496,93 @@ fallback retries.
 The existing Starlette/httpx deprecation warning remains. Provider calls
 were mocked; no live-provider or browser check was run for this fix.
 No schema, endpoint, folder or dependency changes, commits or pushes.
+
+## 16. Slice 4 implementation checklist
+
+- [x] Record the approved feature before code and approve only src/app/services/.
+- [x] Add schema v3, secure_delete, version-gated initialization, required checks/indexes and cascades.
+- [x] Implement scrypt, dummy verification, hashed cookie sessions, bounded login throttle and no-store responses.
+- [x] Add role-discriminated registration, cookie login/logout/me, patient ownership and verified-doctor dependencies.
+- [x] Seed database doctors with optional disabled-by-default seed accounts and polling presence.
+- [x] Add broadcast creation/cancellation/expiry and guarded atomic acceptance, with private data only for the accepting doctor.
+- [x] Update the Persian login, patient and doctor pages, nullable scores, visible-tab polling, owned history and account deletion.
+- [x] Adapt the existing regression tests through cookie-jar registration/login and add auth/security/visit/concurrency checks.
+- [x] Update configuration, PowerShell examples, demo-grade limits and breaking-change documentation.
+- [x] Verify editable installation, the full suite, live routes, package data and an automated three-context browser walkthrough.
+
+### Slice 4 verification (2026-10-25)
+
+Commands:
+- .\.venv\Scripts\python.exe -m unittest discover tests
+- .\.venv\Scripts\python.exe -m pip install -e .
+- APP_DOCTOR_AUTO_VERIFY=true with .\.venv\Scripts\python.exe -m uvicorn app.main:app --app-dir src
+
+Before editing: Ran 88 tests in 11.890s; OK.
+Final after editing: Ran 115 tests in 67.016s; OK.
+The adapted original 88 checks and 27 new auth/security/visit checks pass with
+temporary databases and no real-provider network calls. The existing
+Starlette/httpx deprecation warning remains.
+
+Editable installation succeeded with the previously approved process-only proxy
+bypass and no dependency changes. Package sources include all services and new
+HTML pages. Uvicorn started with auto-verification enabled and a dedicated
+temporary synthetic APP_DB_PATH. The default healthcare_agent.db was not created
+or deleted. Live /health, /docs, /demo, /login, /doctor and /v1/specialties returned
+200. Auth me/logout without a cookie returned 401 with no-store. OpenAPI has no
+old patient-id routes, patient_id ChatResponse field or session-creation body.
+JavaScript syntax checks and git diff --check passed.
+
+The installed headless Chrome ran the flow in three isolated private browser
+contexts: two self-registered general-practice doctors and a patient. Full
+Persian intake/triage, two-doctor preview polling, simultaneous Accept actions,
+one winner/one conflict, the losing queue clearing, accepting-doctor-only full
+details/history/AI, and patient polling to the accepting doctor all passed.
+The browser check also covered nullable score labels, a returning profile and
+previous-visit Persian specialty labels, availability, logout/auth redirection
+and horizontal overflow at widths 320/375/414/768. Screenshots were inspected.
+
+The requested manual interactive private-window walkthrough could not be run:
+the browser-control runtime fails to initialize because kernel.js is missing.
+The browser evidence above is automated, not a claim of manual verification.
+No real provider was tested; fallback was used. No commits or pushes were made.
+Stop after Slice 4.
+
+### Files changed in Slice 4
+
+- `.env.example`
+- `AGENTS.md`
+- `README.md`
+- `docs/changelog.md`
+- `docs/plan.md`
+- `src/app/agent/doctors.py`
+- `src/app/agent/triage.py`
+- `src/app/api/auth.py`
+- `src/app/api/chat.py`
+- `src/app/api/demo.py`
+- `src/app/api/deps.py`
+- `src/app/api/patients.py`
+- `src/app/api/visits.py`
+- `src/app/core/config.py`
+- `src/app/core/db.py`
+- `src/app/core/errors.py`
+- `src/app/core/security.py`
+- `src/app/data/doctors.json`
+- `src/app/main.py`
+- `src/app/schemas/auth.py`
+- `src/app/schemas/chat.py`
+- `src/app/schemas/triage.py`
+- `src/app/schemas/visits.py`
+- `src/app/services/__init__.py`
+- `src/app/services/accounts.py`
+- `src/app/services/doctors.py`
+- `src/app/services/visits.py`
+- `src/app/static/doctor.html`
+- `src/app/static/index.html`
+- `src/app/static/login.html`
+- `tests/helpers.py`
+- `tests/test_auth.py`
+- `tests/test_chat_api.py`
+- `tests/test_dictionaries.py`
+- `tests/test_persistence.py`
+- `tests/test_triage.py`
+- `tests/test_visits.py`

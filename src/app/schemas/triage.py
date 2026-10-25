@@ -28,7 +28,7 @@ class Doctor(BaseModel):
     id: str
     name_fa: str
     expertise: list[str]
-    score: float
+    score: float | None
     online: bool
 
 

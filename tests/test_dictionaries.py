@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 
 from app.agent import dictionaries
 from app.main import app
+from helpers import as_patient, patient_of, register_patient
 
 
 class DictionaryTests(unittest.TestCase):
@@ -152,6 +153,7 @@ class DictionaryApiTests(unittest.TestCase):
         self.db_path = Path(self.enterContext(tempfile.TemporaryDirectory())) / "test.db"
         self.enterContext(patch.dict(os.environ, {"APP_DB_PATH": str(self.db_path)}))
         self.client = self.enterContext(TestClient(app))
+        self.user = register_patient(self.client)
 
     def test_dictionary_endpoint_without_query_and_with_limit(self):
         for kind in ("symptoms", "medicines"):

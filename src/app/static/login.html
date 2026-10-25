@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ورود و ثبت‌نام آزمایشی</title>
+<style>:root{--paper:#f5f5ef;--surface:#fff;--ink:#203b35;--muted:#576b64;--line:#d5ddd5;--accent:#245d48;--tint:#eaf1e9;--danger:#9c2929}
+*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.65 Tahoma,"Segoe UI",sans-serif}
+.banner{padding:10px 16px;text-align:center;background:var(--ink);color:white}.shell{max-width:1050px;margin:auto;padding:24px 16px}
+header{display:flex;justify-content:space-between;gap:16px;align-items:center;flex-wrap:wrap}h1{font-size:28px;font-weight:500}h2{font-size:23px;font-weight:500}h3{font-size:19px}
+button,input,select{font:inherit;min-height:44px;border:1px solid var(--line);border-radius:6px;padding:8px 12px}button{background:var(--accent);color:white;cursor:pointer}button:disabled{opacity:.5;cursor:default}
+input,select{width:100%;background:white;color:var(--ink)}input[type=checkbox]{width:auto}label{display:block;margin:12px 0 6px}fieldset{border:0;padding:0;margin:0}
+:focus-visible{outline:3px solid var(--accent);outline-offset:3px}.tabs{display:flex;gap:8px;margin:16px 0}.tabs button[aria-pressed=false]{background:white;color:var(--ink)}
+.panel,.card{border:1px solid var(--line);border-radius:8px;background:white;padding:20px;margin:16px 0;min-width:0}.muted{color:var(--muted)}.error{color:var(--danger)}.error:empty{display:none}
+.chip{display:inline-block;border:1px solid var(--line);background:var(--tint);border-radius:14px;padding:3px 10px;margin:3px}.tags{display:flex;flex-wrap:wrap;gap:6px}
+p,dd,pre,h3{overflow-wrap:anywhere;white-space:pre-wrap}dt{font-size:14px;color:var(--muted)}dd{margin:4px 0 12px}details{border-top:1px solid var(--line);padding-top:12px;margin-top:16px}summary{cursor:pointer;min-height:44px}pre{font:inherit}.actions{display:flex;gap:8px;flex-wrap:wrap}
+[hidden]{display:none!important}@media(max-width:600px){h1{font-size:24px}.panel,.card{padding:16px}.actions button{flex:1}}.shell{max-width:540px}.submit{width:100%;margin-top:20px}</style></head>
+<body>
+<div class="banner">دموی آزمایشی — فقط اطلاعات ساختگی</div>
+<main class="shell">
+<h1>ورود به دموی سلامت</h1>
+<p class="muted">از نام واقعی، اطلاعات شخصی و گذرواژه‌ای که جای دیگری استفاده می‌کنید استفاده نکنید.</p>
+<nav class="tabs" aria-label="ورود یا ثبت‌نام">
+<button id="login-tab" type="button" aria-pressed="true">ورود</button>
+<button id="register-tab" type="button" aria-pressed="false">ثبت‌نام</button>
+</nav>
+<form id="auth-form" class="panel">
+<label for="username">نام کاربری آزمایشی</label>
+<input id="username" autocomplete="username" required minlength="3" maxlength="32" pattern="[a-zA-Z0-9_.-]{3,32}" dir="ltr" aria-describedby="username-help">
+<p id="username-help" class="muted">۳ تا ۳۲ حرف انگلیسی، عدد، نقطه، خط تیره یا زیرخط.</p>
+<label for="password">گذرواژه</label>
+<input id="password" type="password" autocomplete="current-password" required minlength="8" maxlength="128">
+<fieldset id="registration" hidden disabled>
+<label for="role">نوع حساب</label>
+<select id="role"><option value="patient">بیمار آزمایشی</option><option value="doctor">پزشک آزمایشی</option></select>
+<fieldset id="doctor-fields" hidden disabled>
+<label for="name-fa">نام نمایشی فرضی</label><input id="name-fa" minlength="2" maxlength="60" required autocomplete="off">
+<label for="specialty">تخصص</label><select id="specialty" required><option value="">در حال دریافت تخصص‌ها...</option></select>
+<label for="expertise-1">حوزهٔ کاری اول (ساختگی)</label><input id="expertise-1" required minlength="2" maxlength="40" autocomplete="off">
+<label for="expertise-2">حوزهٔ کاری دوم (ساختگی)</label><input id="expertise-2" required minlength="2" maxlength="40" autocomplete="off">
+<label for="expertise-3">حوزهٔ کاری سوم (اختیاری)</label><input id="expertise-3" minlength="2" maxlength="40" autocomplete="off">
+</fieldset></fieldset>
+<p id="error" class="error" role="alert"></p>
+<button id="submit" class="submit" type="submit">ورود</button>
+</form>
+</main>
+<script>
+const form=document.getElementById("auth-form"), username=document.getElementById("username"), password=document.getElementById("password");
+const role=document.getElementById("role"), registration=document.getElementById("registration"), doctorFields=document.getElementById("doctor-fields");
+const specialty=document.getElementById("specialty"), errorLine=document.getElementById("error"), submit=document.getElementById("submit");
+const loginTab=document.getElementById("login-tab"), registerTab=document.getElementById("register-tab");
+let registering=false, busy=false;
+const destination=user=>user.role==="doctor"?"/doctor":"/demo";
+function mode(value){
+  if(busy)return;
+  registering=value;
+  registration.hidden=!value;registration.disabled=!value;
+  doctorFields.hidden=!value||role.value!=="doctor";doctorFields.disabled=doctorFields.hidden;
+  password.autocomplete=value?"new-password":"current-password";
+  submit.textContent=value?"ثبت‌نام":"ورود";
+  loginTab.setAttribute("aria-pressed",String(!value));registerTab.setAttribute("aria-pressed",String(value));
+  errorLine.textContent="";
+}
+loginTab.addEventListener("click",()=>mode(false));registerTab.addEventListener("click",()=>mode(true));role.addEventListener("change",()=>mode(registering));
+function message(status){
+  return {401:"نام کاربری یا گذرواژه درست نیست.",403:"دسترسی مجاز نیست.",409:"این نام کاربری در دسترس نیست.",422:"اطلاعات واردشده را بررسی کنید.",429:"تلاش‌های ناموفق زیاد بوده است. کمی بعد دوباره امتحان کنید."}[status]||"ارتباط برقرار نشد. دوباره تلاش کنید.";
+}
+form.addEventListener("submit",async event=>{
+  event.preventDefault();if(busy)return;
+  busy=true;submit.disabled=true;loginTab.disabled=true;registerTab.disabled=true;errorLine.textContent="";
+  const body={username:username.value,password:password.value};
+  if(registering){
+    body.role=role.value;
+    if(body.role==="doctor"){
+      body.name_fa=document.getElementById("name-fa").value;
+      body.specialty_code=specialty.value;
+      body.expertise=[1,2,3].map(index=>document.getElementById("expertise-"+index).value.trim()).filter(Boolean);
+    }
+  }
+  try{
+    const response=await fetch("/v1/auth/"+(registering?"register":"login"),{
+      method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify(body),signal:AbortSignal.timeout(10000)
+    });
+    if(!response.ok){errorLine.textContent=message(response.status);return;}
+    const result=await response.json();password.value="";location.assign(destination(result.user));
+  }catch{errorLine.textContent=message(0);}
+  finally{busy=false;submit.disabled=false;loginTab.disabled=false;registerTab.disabled=false;}
+});
+(async()=>{
+  try{
+    const response=await fetch("/v1/specialties",{credentials:"same-origin",signal:AbortSignal.timeout(10000)});
+    if(!response.ok)throw Error();
+    const entries=await response.json();specialty.replaceChildren();
+    const placeholder=document.createElement("option");placeholder.value="";placeholder.textContent="تخصص را انتخاب کنید";specialty.append(placeholder);
+    for(const entry of entries){const option=document.createElement("option");option.value=entry.code;option.textContent=entry.name_fa;specialty.append(option);}
+  }catch{specialty.replaceChildren();const option=document.createElement("option");option.value="";option.textContent="دریافت تخصص‌ها ناموفق بود";specialty.append(option);}
+})();
+(async()=>{
+  try{const response=await fetch("/v1/auth/me",{credentials:"same-origin",signal:AbortSignal.timeout(10000)});
+    if(response.ok)location.replace(destination((await response.json()).user));}
+  catch{}
+})();
+</script></body></html>

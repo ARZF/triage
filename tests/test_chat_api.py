@@ -11,6 +11,7 @@ from contextlib import closing
 
 from app.core.db import connect
 from app.main import app
+from helpers import as_patient, patient_of, register_patient
 from app.schemas.common import ErrorResponse
 
 
@@ -19,6 +20,7 @@ class ChatApiTests(unittest.TestCase):
         self.db_path = Path(self.enterContext(tempfile.TemporaryDirectory())) / "test.db"
         self.enterContext(patch.dict(os.environ, {"APP_DB_PATH": str(self.db_path)}))
         self.client = self.enterContext(TestClient(app))
+        self.user = register_patient(self.client)
 
     def stored_session(self, session_id):
         with closing(connect()) as connection:

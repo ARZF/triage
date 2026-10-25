@@ -25,7 +25,7 @@
     h1 { margin: 0; font: 500 clamp(28px, 5vw, 40px)/1.2 var(--font-display); }
     header p { color: var(--muted); margin: var(--space-sm) 0 0; }
     .actions { display: flex; gap: var(--space-sm); flex-wrap: wrap; }
-    #forget { background: transparent; color: var(--danger); border-color: var(--danger); }
+    #delete-account { background: transparent; color: var(--danger); border-color: var(--danger); }
     #returning-note { padding: var(--space-md); border: 1px solid var(--line); background: var(--tint); }
     #history { margin-top: var(--space-lg); border-top: 1px solid var(--line); padding-top: var(--space-md); }
     #history summary { cursor: pointer; min-height: 44px; }
@@ -101,7 +101,8 @@
     <header>
       <div><h1>پذیرش بیمار</h1><p>گفت‌وگویی از پیش تعیین‌شده؛ فقط از اطلاعات ساختگی استفاده کنید.</p></div>
       <div class="actions"><button id="reset" type="button">شروع دوباره</button>
-        <button id="forget" type="button" disabled>فراموشم کن</button>
+        <button id="delete-account" type="button" disabled>حذف حساب و اطلاعات من</button>
+        <button id="logout" type="button">خروج</button>
       </div>
     </header>
     <p id="returning-note" hidden role="status">مراجعهٔ مجدد — اطلاعات قبلی را بررسی کنید.</p>
@@ -129,6 +130,8 @@
           <h2 id="triage-title">پیشنهاد تخصص و پزشکان فرضی</h2>
           <p id="triage-status" role="status" aria-live="polite"></p>
           <div id="triage-details"></div>
+          <button id="request-visit" type="button" disabled aria-describedby="visit-help">درخواست ویزیت آنلاین</button>
+          <p id="visit-help" role="status">پس از تکمیل ارزیابی و دریافت پیشنهاد تخصص می‌توانید درخواست بدهید.</p>
           <button id="triage-retry" type="button" hidden>تلاش دوباره</button>
         </section>
       </section>
@@ -138,6 +141,11 @@
         <dl id="collected"></dl>
         <div id="matched-symptoms" class="matches" role="list" aria-label="واژه‌های علائم شناسایی‌شده" aria-live="polite"></div>
         <div id="matched-medicines" class="matches" role="list" aria-label="نام داروهای شناسایی‌شده" aria-live="polite"></div>
+<details id="my-requests" open>
+          <summary>درخواست‌های من</summary>
+          <p id="requests-error" class="error" role="alert"></p>
+          <div id="own-requests" aria-live="polite"></div>
+        </details>
         <details id="history">
           <summary>مراجعات قبلی</summary>
           <div id="visit-history" aria-live="polite"></div>
@@ -145,7 +153,7 @@
         <p class="vocabulary-note">فهرست واژگان اولیه است و از نظر بالینی بررسی نشده است.</p>
       </aside>
     </main>
-    <footer>این نسخه فقط نمایشی است و تشخیص یا توصیهٔ درمانی ارائه نمی‌کند. اطلاعات ساختگی ذخیره می‌شوند و با «فراموشم کن» قابل حذف هستند.</footer>
+    <footer>این دموی آزمایشی تشخیص یا درمان ارائه نمی‌کند. فقط از اطلاعات ساختگی استفاده کنید. حذف حساب، اطلاعات و درخواست‌های شما را پاک می‌کند.</footer>
   </div>
   <script>
     const input = document.getElementById("message");
@@ -167,7 +175,8 @@
     const send = document.getElementById("send");
     const defaultSendLabel = send.textContent;
     const reset = document.getElementById("reset");
-    const forget = document.getElementById("forget");
+    const deleteAccount = document.getElementById("delete-account");
+    const logout = document.getElementById("logout");
     const returningNote = document.getElementById("returning-note");
     const historyPanel = document.getElementById("history");
     const visitHistory = document.getElementById("visit-history");
@@ -189,24 +198,22 @@
       document.getElementById("collected").append(row);
       fields[name] = value;
     }
-    let patientId = null;
     let historyVersion = 0;
-    try {
-      patientId = localStorage.getItem("healthcare_patient_id") || null;
-      if (patientId && patientId.length > 64) rememberPatient(null);
-    } catch {}
     let current = null;
     let busy = false;
     let blocked = false;
     let draftMedicines = [];
     function controls() {
-      input.disabled = busy || blocked || !current || current.done;
+      input.disabled = busy || visitBusy || blocked || !current || current.done;
       send.disabled = input.disabled || (current?.step === "medications" && !draftMedicines.length && !input.value.trim());
       addMedicineButton.disabled = input.disabled || !input.value.trim();
       medicineItems.querySelectorAll("button").forEach(button => button.disabled = input.disabled);
       choice.disabled = input.disabled || choice.options.length <= 1;
-      reset.disabled = busy;
-      forget.disabled = busy || !patientId;
+      reset.disabled = busy || visitBusy;
+      deleteAccount.disabled = busy || visitBusy;
+      logout.disabled = busy || visitBusy;
+      ownRequestList.querySelectorAll("button").forEach(button=>button.disabled=busy||visitBusy);
+      updateVisitButton();
     }
     const triagePanel = document.getElementById("triage");
     const triageStatus = document.getElementById("triage-status");
@@ -214,6 +221,8 @@
     const triageRetry = document.getElementById("triage-retry");
     function clearTriage() {
       triagePanel.hidden = true;
+      lastTriage=null;
+      updateVisitButton();
       triageDetails.replaceChildren();
       triageStatus.textContent = "";
       triageRetry.hidden = true;
@@ -241,27 +250,10 @@
           triageDetails.append(reason);
         }
         triageDetails.append(notice);
-        for (const doctor of result.doctors) {
-          const card = document.createElement("article");
-          card.className = "doctor-card";
-          const name = document.createElement("h3");
-          name.textContent = doctor.name_fa;
-          const score = document.createElement("p");
-          score.textContent = "امتیاز " + doctor.score.toLocaleString("fa-IR", {minimumFractionDigits: 1, maximumFractionDigits: 1}) + " از ۵";
-          const online = document.createElement("span");
-          online.className = "online";
-          online.textContent = doctor.online ? "آنلاین" : "آفلاین";
-          const tags = document.createElement("div");
-          tags.className = "doctor-expertise";
-          for (const text of doctor.expertise) {
-            const tag = document.createElement("span");
-            tag.className = "chip";
-            tag.textContent = text;
-            tags.append(tag);
-          }
-          card.append(name, score, online, tags);
-          triageDetails.append(card);
-        }
+        for (const doctor of result.doctors) triageDetails.append(doctorCard(doctor));
+        lastTriage=result;
+        if(!result.emergency&&!result.doctors.some(doctor=>doctor.online))triageRetry.hidden=false;
+        updateVisitButton();
       } catch {
         triageStatus.textContent = "دریافت پیشنهاد انجام نشد. دوباره تلاش کنید.";
         triageRetry.hidden = false;
@@ -276,20 +268,91 @@
       finally { busy = false; triageRetry.disabled = false; controls(); }
     });
 
-    function rememberPatient(id) {
-      patientId = id;
-      try {
-        if (id) localStorage.setItem("healthcare_patient_id", id);
-        else localStorage.removeItem("healthcare_patient_id");
-      } catch {}
+    const visitButton = document.getElementById("request-visit");
+    const visitHelp = document.getElementById("visit-help");
+    const ownRequestList = document.getElementById("own-requests");
+    const requestsError = document.getElementById("requests-error");
+    let lastTriage = null, ownRequests = [], visitBusy = false, requestsLoading = false, requestsTimer = null;
+    const requestSessions = new Map();
+    function doctorCard(doctor) {
+      const card = document.createElement("article");card.className = "doctor-card";
+      const name = document.createElement("h3");name.textContent = doctor.name_fa;
+      const score = document.createElement("p");
+      score.textContent = doctor.score === null ? "بدون امتیاز" : "امتیاز " + doctor.score.toLocaleString("fa-IR", {minimumFractionDigits:1,maximumFractionDigits:1}) + " از ۵";
+      card.append(name,score);
+      if ("online" in doctor) {const online=document.createElement("span");online.className="online";online.textContent=doctor.online?"آنلاین":"آفلاین";card.append(online);}
+      const tags=document.createElement("div");tags.className="doctor-expertise";
+      for (const text of doctor.expertise) {const tag=document.createElement("span");tag.className="chip";tag.textContent=text;tags.append(tag);}card.append(tags);
+      return card;
     }
-    async function loadHistory() {
-      const id = patientId;
-      const version = ++historyVersion;
-      if (!id) { visitHistory.replaceChildren(); return; }
+    function updateVisitButton() {
+      const active = ownRequests.some(item => requestSessions.get(item.id) === current?.session_id && ["pending","accepted"].includes(item.status));
+      visitButton.disabled = busy || visitBusy || !lastTriage || lastTriage.emergency || !lastTriage.doctors.some(doctor => doctor.online) || active;
+      visitHelp.textContent = active ? "برای این ارزیابی درخواست فعال دارید؛ وضعیت آن در درخواست‌های من نمایش داده می‌شود."
+        : lastTriage?.emergency ? "در وضعیت اورژانسی درخواست ویزیت از این دمو ممکن نیست."
+        : lastTriage && !lastTriage.doctors.some(doctor => doctor.online) ? "پزشک آنلاینی در فهرست نیست. پس از آنلاین شدن پزشک، پیشنهاد را به‌روزرسانی کنید."
+        : lastTriage ? "درخواست برای پزشکان آنلاین این تخصص ارسال می‌شود؛ اولین پزشک آن را می‌پذیرد."
+        : "پس از تکمیل ارزیابی و دریافت پیشنهاد تخصص می‌توانید درخواست بدهید.";
+    }
+    async function loadRequests() {
+      clearTimeout(requestsTimer);
+      if (requestsLoading) return;
+      if (document.hidden) {requestsTimer=setTimeout(loadRequests,10000);return;}
+      requestsLoading=true;
       try {
-        const visits = await request("/v1/patients/" + encodeURIComponent(id) + "/history?limit=10", undefined, "GET");
-        if (version !== historyVersion || id !== patientId) return;
+        ownRequests=await request("/v1/visit-requests",undefined,"GET");
+        ownRequestList.replaceChildren();requestsError.textContent="";
+        if (!ownRequests.length) {const empty=document.createElement("p");empty.textContent="درخواستی ثبت نشده است.";ownRequestList.append(empty);}
+        const labels={pending:"در انتظار پذیرش پزشک",accepted:"پذیرفته‌شده",cancelled:"لغوشده",expired:"مهلت درخواست تمام شده است"};
+        for (const item of ownRequests) {
+          const card=document.createElement("article");card.className="doctor-card";card.dataset.requestId=item.id;
+          const heading=document.createElement("h3");heading.textContent=item.specialty.name_fa;
+          const status=document.createElement("p");status.className="chip";status.textContent=labels[item.status];card.append(heading,status);
+          if (item.status==="pending") {
+            const cancel=document.createElement("button");cancel.type="button";cancel.textContent="لغو درخواست";cancel.disabled=visitBusy;
+            cancel.addEventListener("click",async()=>{
+              if(visitBusy)return;visitBusy=true;controls();
+              try{await request("/v1/visit-requests/"+encodeURIComponent(item.id)+"/cancel");}
+              catch{requestsError.textContent="لغو درخواست انجام نشد؛ ممکن است پزشک آن را پذیرفته باشد.";}
+              finally{visitBusy=false;await loadRequests();controls();}
+            });card.append(cancel);
+          }
+          if (item.doctor) card.append(doctorCard(item.doctor));
+          if (["expired","cancelled"].includes(item.status)) {
+            const again=document.createElement("button");again.type="button";
+            again.textContent=requestSessions.has(item.id)?"درخواست دوباره":"ارزیابی تازه و درخواست دوباره";
+            again.addEventListener("click",()=>{if(requestSessions.has(item.id))requestVisit(requestSessions.get(item.id));else start();});card.append(again);
+          }
+          ownRequestList.append(card);
+        }
+        updateVisitButton();
+      } catch {requestsError.textContent="دریافت درخواست‌ها انجام نشد. دوباره تلاش می‌شود.";}
+      finally {
+        requestsLoading=false;
+        if(ownRequests.some(item=>item.status==="pending"))requestsTimer=setTimeout(loadRequests,10000);
+      }
+    }
+    async function requestVisit(sessionId=current?.session_id) {
+      if(visitBusy||!sessionId)return;
+      visitBusy=true;requestsError.textContent="";controls();
+      try {
+        const result=await request("/v1/visit-requests",{session_id:sessionId});
+        requestSessions.set(result.id,sessionId);await loadRequests();
+        document.getElementById("my-requests").open=true;
+      } catch(error) {
+        requestsError.textContent=error.code==="no_online_doctor"?"پزشک آنلاین این تخصص در دسترس نیست. پیشنهاد را به‌روزرسانی کنید."
+          : error.code==="active_request_exists"?"برای این ارزیابی درخواست فعال دارید."
+          : "ارسال درخواست انجام نشد. وضعیت درخواست‌ها را بررسی کنید و دوباره تلاش کنید.";
+      } finally {visitBusy=false;controls();}
+    }
+    visitButton.addEventListener("click",()=>requestVisit());
+    document.addEventListener("visibilitychange",()=>{if(!document.hidden)loadRequests();});
+
+    async function loadHistory() {
+      const version = ++historyVersion;
+      try {
+        const visits = await request("/v1/me/history?limit=10", undefined, "GET");
+        if (version !== historyVersion) return;
         visitHistory.replaceChildren();
         const previous = visits.filter(visit => visit.session_id !== current?.session_id);
         if (!previous.length) {
@@ -316,7 +379,7 @@
           visitHistory.append(article);
         }
       } catch {
-        if (version !== historyVersion || id !== patientId) return;
+        if (version !== historyVersion) return;
         visitHistory.textContent = "دریافت سابقه ممکن نشد. برای تلاش دوباره، این بخش را باز کنید.";
       }
     }
@@ -414,13 +477,17 @@
     async function request(path, body, method = "POST", timeout = 10000) {
       const response = await fetch(path, {
         method,
+        credentials: "same-origin",
         headers: body ? {"Content-Type": "application/json"} : {},
         body: body ? JSON.stringify(body) : undefined,
         signal: AbortSignal.timeout(timeout)
       });
       if (!response.ok) {
+        if(response.status===401)location.replace("/login");
+        if(response.status===403)location.replace("/doctor");
         const error = new Error("درخواست ناموفق بود (کد " + response.status.toLocaleString("fa-IR") + "). برای ادامه «شروع دوباره» را بزنید.");
         error.status = response.status;
+        try {error.code=(await response.json()).error?.code;} catch {}
         throw error;
       }
       if (response.status === 204) return null;
@@ -444,15 +511,7 @@
           const dictionary = await request("/v1/dictionaries/" + kind + "?limit=100", undefined, "GET");
           answerChoices[step] = [...(step === "medications" ? [noMedicine] : []), ...dictionary.entries.map(entry => entry.name_fa), customAnswer];
         }
-        let state;
-        try {
-          state = await request("/v1/chat/sessions", patientId ? {patient_id: patientId} : undefined);
-        } catch (error) {
-          if (!patientId || error.status !== 404) throw error;
-          rememberPatient(null);
-          state = await request("/v1/chat/sessions");
-        }
-        rememberPatient(state.patient_id);
+        const state = await request("/v1/chat/sessions");
         blocked = false;
         messages.replaceChildren();
         input.value = "";
@@ -508,36 +567,28 @@
     });
     reset.addEventListener("click", start);
     historyPanel.addEventListener("toggle", () => { if (historyPanel.open) loadHistory(); });
-    forget.addEventListener("click", async () => {
-      if (busy || !patientId) return;
-      busy = true;
-      controls();
-      let deleted = false;
-      try {
-        try { await request("/v1/patients/" + encodeURIComponent(patientId), undefined, "DELETE"); }
-        catch (error) { if (error.status !== 404) throw error; }
-        rememberPatient(null);
-        current = null;
-        blocked = false;
-        historyVersion++;
-        clearTriage();
-        draftMedicines = [];
-        renderMedicineList();
-        medicineEditor.hidden = true;
-        addMedicineButton.hidden = true;
-        returningNote.hidden = true;
-        messages.replaceChildren();
-        visitHistory.replaceChildren();
-        for (const node of Object.values(fields)) node.textContent = "هنوز پاسخ داده نشده";
-        document.querySelectorAll(".matches").forEach(node => node.replaceChildren());
-        input.value = "";
-        errorLine.textContent = "";
-        deleted = true;
-      } catch (error) { fail(error); }
-      finally { busy = false; controls(); }
-      if (deleted) await start();
+    logout.addEventListener("click", async () => {
+      if (busy || visitBusy) return;
+      busy=true;controls();
+      try {await request("/v1/auth/logout");location.replace("/login");}
+      catch {errorLine.textContent="خروج انجام نشد. دوباره تلاش کنید.";}
+      finally {busy=false;controls();}
     });
-    start();
+    deleteAccount.addEventListener("click", async () => {
+      if (busy || visitBusy) return;
+      busy=true;controls();
+      try {await request("/v1/me",undefined,"DELETE");location.replace("/login");}
+      catch {errorLine.textContent="حذف حساب انجام نشد. دوباره تلاش کنید.";}
+      finally {busy=false;controls();}
+    });
+    (async () => {
+      try {
+        const result=await request("/v1/auth/me",undefined,"GET");
+        if (result.user.role!=="patient") {location.replace("/doctor");return;}
+        await start();await loadRequests();
+      } catch(error) {fail(error);}
+    })();
+
   </script>
 </body>
 </html>

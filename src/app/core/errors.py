@@ -9,6 +9,17 @@ from starlette.exceptions import HTTPException
 from app.schemas.common import ErrorDetail, ErrorResponse
 
 
+class ServiceError(Exception):
+    def __init__(self, status_code: int, code: str, message: str, headers: dict | None = None):
+        self.status_code, self.code, self.message = status_code, code, message
+        self.headers = headers
+
+
+async def service_error_handler(request: Request, exc: ServiceError) -> JSONResponse:
+    error = ErrorResponse(error=ErrorDetail(code=exc.code, message=exc.message))
+    return JSONResponse(status_code=exc.status_code, content=error.model_dump(), headers=exc.headers)
+
+
 async def http_error_handler(request: Request, exc: HTTPException) -> JSONResponse:
     error = ErrorResponse(
         error=ErrorDetail(
@@ -38,6 +49,7 @@ async def storage_error_handler(request: Request, exc: sqlite3.Error) -> JSONRes
 
 
 def register_exception_handlers(app: FastAPI) -> None:
+    app.add_exception_handler(ServiceError, service_error_handler)
     app.add_exception_handler(HTTPException, http_error_handler)
     app.add_exception_handler(RequestValidationError, validation_error_handler)
     app.add_exception_handler(sqlite3.Error, storage_error_handler)

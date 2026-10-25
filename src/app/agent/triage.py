@@ -6,7 +6,8 @@ from contextlib import closing
 from pydantic import ValidationError
 
 from app.agent.context import build_context
-from app.agent.doctors import for_specialty, load_doctors
+from app.agent.doctors import load_doctors
+from app.services.doctors import for_specialty
 from app.agent.intake import EMERGENCY_REPLY
 from app.core import db, llm
 from app.core.config import Settings

@@ -11,6 +11,24 @@ def _llm_timeout() -> float:
         raise ValueError("APP_LLM_TIMEOUT_SECONDS") from None
 
 
+
+def _bool_env(name: str, default: str) -> bool:
+    value = os.environ.get(name, default).casefold()
+    if value not in ("true", "false"):
+        raise ValueError(name)
+    return value == "true"
+
+
+def _int_env(name: str, default: str, lower: int, upper: int) -> int:
+    try:
+        value = int(os.environ.get(name, default))
+    except ValueError:
+        raise ValueError(name) from None
+    if not lower <= value <= upper:
+        raise ValueError(name)
+    return value
+
+
 @dataclass(frozen=True)
 class Settings:
     log_level: str = field(
@@ -22,7 +40,15 @@ class Settings:
     llm_model: str | None = field(default_factory=lambda: os.environ.get("APP_LLM_MODEL") or None)
     llm_timeout_seconds: float = field(default_factory=_llm_timeout)
 
+    cookie_secure: bool = field(default_factory=lambda: _bool_env("APP_COOKIE_SECURE", "false"))
+    session_ttl_hours: int = field(default_factory=lambda: _int_env("APP_SESSION_TTL_HOURS", "12", 1, 168))
+    demo_doctor_password: str | None = field(default_factory=lambda: os.environ.get("APP_DEMO_DOCTOR_PASSWORD") or None, repr=False)
+    doctor_auto_verify: bool = field(default_factory=lambda: _bool_env("APP_DOCTOR_AUTO_VERIFY", "false"))
+    request_ttl_minutes: int = field(default_factory=lambda: _int_env("APP_REQUEST_TTL_MINUTES", "30", 1, 1440))
+
     def __post_init__(self) -> None:
+        if self.demo_doctor_password is not None and not 8 <= len(self.demo_doctor_password) <= 128:
+            raise ValueError("APP_DEMO_DOCTOR_PASSWORD")
         if not self.db_path.strip():
             raise ValueError("APP_DB_PATH must be non-empty")
         if self.log_level not in {"INFO", "WARNING", "ERROR", "CRITICAL"}:

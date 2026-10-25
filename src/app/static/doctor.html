@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>داشبورد پزشک آزمایشی</title>
+<style>:root{--paper:#f5f5ef;--surface:#fff;--ink:#203b35;--muted:#576b64;--line:#d5ddd5;--accent:#245d48;--tint:#eaf1e9;--danger:#9c2929}
+*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.65 Tahoma,"Segoe UI",sans-serif}
+.banner{padding:10px 16px;text-align:center;background:var(--ink);color:white}.shell{max-width:1050px;margin:auto;padding:24px 16px}
+header{display:flex;justify-content:space-between;gap:16px;align-items:center;flex-wrap:wrap}h1{font-size:28px;font-weight:500}h2{font-size:23px;font-weight:500}h3{font-size:19px}
+button,input,select{font:inherit;min-height:44px;border:1px solid var(--line);border-radius:6px;padding:8px 12px}button{background:var(--accent);color:white;cursor:pointer}button:disabled{opacity:.5;cursor:default}
+input,select{width:100%;background:white;color:var(--ink)}input[type=checkbox]{width:auto}label{display:block;margin:12px 0 6px}fieldset{border:0;padding:0;margin:0}
+:focus-visible{outline:3px solid var(--accent);outline-offset:3px}.tabs{display:flex;gap:8px;margin:16px 0}.tabs button[aria-pressed=false]{background:white;color:var(--ink)}
+.panel,.card{border:1px solid var(--line);border-radius:8px;background:white;padding:20px;margin:16px 0;min-width:0}.muted{color:var(--muted)}.error{color:var(--danger)}.error:empty{display:none}
+.chip{display:inline-block;border:1px solid var(--line);background:var(--tint);border-radius:14px;padding:3px 10px;margin:3px}.tags{display:flex;flex-wrap:wrap;gap:6px}
+p,dd,pre,h3{overflow-wrap:anywhere;white-space:pre-wrap}dt{font-size:14px;color:var(--muted)}dd{margin:4px 0 12px}details{border-top:1px solid var(--line);padding-top:12px;margin-top:16px}summary{cursor:pointer;min-height:44px}pre{font:inherit}.actions{display:flex;gap:8px;flex-wrap:wrap}
+[hidden]{display:none!important}@media(max-width:600px){h1{font-size:24px}.panel,.card{padding:16px}.actions button{flex:1}}</style></head>
+<body><div class="banner">دموی آزمایشی — فقط اطلاعات ساختگی</div>
+<main class="shell">
+<header><h1 id="doctor-name">داشبورد پزشک</h1><div class="actions">
+<label id="availability-control" hidden><input type="checkbox" id="available"> آمادهٔ پذیرش درخواست</label>
+<button id="logout" type="button">خروج</button></div></header>
+<p id="waiting" class="panel" hidden>حساب شما در انتظار تأیید است. تا زمان تأیید به اطلاعات بیماران دسترسی ندارید.</p>
+<section id="dashboard" hidden aria-label="درخواست‌های ویزیت">
+<nav class="tabs" aria-label="صف و بیماران پذیرفته‌شده"><button id="queue-tab" aria-pressed="true" type="button">صف درخواست‌ها</button><button id="accepted-tab" aria-pressed="false" type="button">بیماران من</button></nav>
+<p id="status" role="status" aria-live="polite">در حال دریافت درخواست‌ها...</p>
+<p id="error" class="error" role="alert"></p>
+<div id="requests"></div>
+</section>
+</main>
+<script>
+const nameLine=document.getElementById("doctor-name"), available=document.getElementById("available"), availabilityControl=document.getElementById("availability-control");
+const dashboard=document.getElementById("dashboard"), waiting=document.getElementById("waiting"), requestList=document.getElementById("requests");
+const statusLine=document.getElementById("status"), errorLine=document.getElementById("error"), queueTab=document.getElementById("queue-tab"), acceptedTab=document.getElementById("accepted-tab");
+let user=null, items=[], specialtyNames={}, activeTab="pending", busy=false, loading=false;
+const labels={age:"سن",symptoms:"علائم",duration:"مدت علائم",severity:"شدت",medications:"داروها",allergies:"حساسیت‌ها"};
+const urgencyLabels={routine:"معمول",soon:"به‌زودی",urgent:"فوری",emergency:"اورژانسی",unknown:"نامشخص"};
+async function request(path,body,method="GET"){
+  const response=await fetch(path,{method,credentials:"same-origin",headers:body?{"Content-Type":"application/json"}:{},body:body?JSON.stringify(body):undefined,signal:AbortSignal.timeout(10000)});
+  if(response.status===401){location.replace("/login");throw Error("redirect");}
+  if(!response.ok){const error=Error("request");error.status=response.status;throw error;}
+  return response.status===204?null:response.json();
+}
+function paragraph(parent,text,className=""){const node=document.createElement("p");node.textContent=text;node.className=className;parent.append(node);return node;}
+function renderFields(parent,data){
+  const dl=document.createElement("dl");
+  for(const [key,label] of Object.entries(labels)){
+    if(!(key in data))continue;
+    const term=document.createElement("dt");term.textContent=label;
+    const value=document.createElement("dd");value.textContent=data[key]===null?"ثبت نشده":typeof data[key]==="number"?data[key].toLocaleString("fa-IR"):data[key];dl.append(term,value);
+  }parent.append(dl);
+  if(data.matched){
+    const tags=document.createElement("div");tags.className="tags";
+    for(const name of [...data.matched.symptoms,...data.matched.medicines]){
+      const chip=document.createElement("span");chip.className="chip";chip.textContent=name;tags.append(chip);
+    }parent.append(tags);
+  }
+}
+function render(){
+  queueTab.setAttribute("aria-pressed",String(activeTab==="pending"));acceptedTab.setAttribute("aria-pressed",String(activeTab==="accepted"));
+  requestList.replaceChildren();
+  const visible=items.filter(item=>item.status===activeTab);
+  statusLine.textContent=activeTab==="pending"&&!available.checked?"پذیرش درخواست غیرفعال است.":visible.length?visible.length.toLocaleString("fa-IR")+" درخواست":"درخواستی وجود ندارد.";
+  for(const item of visible){
+    const article=document.createElement("article");article.className="card";article.dataset.requestId=item.id;
+    const title=document.createElement("h2");title.textContent=item.specialty.name_fa;article.append(title);
+    paragraph(article,new Date(item.created_at).toLocaleString("fa-IR"),"muted");
+    paragraph(article,"فوریت: "+(urgencyLabels[item.urgency]||item.urgency),"chip");
+    if(item.status==="pending"){
+      renderFields(article,item.preview);
+      const accept=document.createElement("button");accept.type="button";accept.textContent="پذیرش درخواست";accept.disabled=busy||!available.checked;
+      accept.addEventListener("click",()=>acceptRequest(item.id));article.append(accept);
+    }else{
+      renderFields(article,item.patient);
+      const previous=document.createElement("details"), summary=document.createElement("summary");summary.textContent="ویزیت‌های قبلی";previous.append(summary);
+      if(!item.previous_visits.length)paragraph(previous,"ویزیت قبلی ثبت نشده است.");
+      for(const visit of item.previous_visits){
+        const section=document.createElement("section");paragraph(section,new Date(visit.date+"T00:00:00").toLocaleDateString("fa-IR"));renderFields(section,visit);
+        if(visit.triage_specialty)paragraph(section,"تخصص پیشنهادی قبلی: "+(specialtyNames[visit.triage_specialty]||"نامشخص"),"muted");
+        previous.append(section);
+      }article.append(previous);
+      if(item.ai){
+        const ai=document.createElement("section");ai.className="panel";const heading=document.createElement("h3");heading.textContent="یادداشت پیشنهادی برای بررسی پزشک";ai.append(heading);
+        paragraph(ai,item.ai.notice,"muted");paragraph(ai,item.ai.source==="llm"?"منبع: هوش مصنوعی":"منبع: پیشنهاد عمومی");
+        paragraph(ai,item.ai.doctor_summary||"خلاصهٔ هوش مصنوعی موجود نیست.");
+        const list=document.createElement("ul");for(const text of item.ai.considerations){const li=document.createElement("li");li.textContent=text;list.append(li);}ai.append(list);article.append(ai);
+      }
+    }requestList.append(article);
+  }
+}
+async function refresh(){
+  if(!user?.doctor?.verified||document.hidden||busy||loading)return;
+  loading=true;
+  try{items=await request("/v1/doctor/requests");render();}
+  catch(error){if(error.status===403){items=[];requestList.replaceChildren();dashboard.hidden=true;availabilityControl.hidden=true;waiting.hidden=false;}
+    else if(error.message!=="redirect")errorLine.textContent="دریافت درخواست‌ها انجام نشد. دوباره تلاش می‌شود.";}
+  finally{loading=false;}
+}
+async function acceptRequest(id){
+  if(busy)return;busy=true;available.disabled=true;errorLine.textContent="";render();
+  try{await request("/v1/doctor/requests/"+encodeURIComponent(id)+"/accept",undefined,"POST");activeTab="accepted";}
+  catch(error){errorLine.textContent=error.status===409?"پزشک دیگری این درخواست را پذیرفت یا درخواست دیگر فعال نیست.":error.status===404?"این درخواست در دسترس نیست.":"پذیرش درخواست انجام نشد.";}
+  finally{busy=false;available.disabled=false;await refresh();}
+}
+queueTab.addEventListener("click",()=>{activeTab="pending";render();refresh();});
+acceptedTab.addEventListener("click",()=>{activeTab="accepted";render();refresh();});
+available.addEventListener("change",async()=>{
+  if(busy)return;busy=true;available.disabled=true;errorLine.textContent="";
+  try{const result=await request("/v1/doctor/availability",{available:available.checked},"PUT");user.doctor.available=result.available;}
+  catch{available.checked=user.doctor.available;errorLine.textContent="تغییر وضعیت انجام نشد.";}
+  finally{busy=false;available.disabled=false;await refresh();}
+});
+document.getElementById("logout").addEventListener("click",async()=>{
+  if(busy)return;busy=true;
+  try{await request("/v1/auth/logout",undefined,"POST");location.replace("/login");}
+  catch{errorLine.textContent="خروج انجام نشد. دوباره تلاش کنید.";}finally{busy=false;}
+});
+document.addEventListener("visibilitychange",()=>{if(!document.hidden)refresh();});
+(async()=>{
+  try{
+    user=(await request("/v1/auth/me")).user;
+    if(user.role!=="doctor"){location.replace("/demo");return;}
+    try {specialtyNames=Object.fromEntries((await request("/v1/specialties")).map(item=>[item.code,item.name_fa]));} catch {}
+    nameLine.textContent=user.display_name;
+    if(!user.doctor.verified){waiting.hidden=false;return;}
+    available.checked=user.doctor.available;availabilityControl.hidden=false;dashboard.hidden=false;await refresh();
+    setInterval(refresh,10000);
+  }catch(error){if(error.message!=="redirect"){dashboard.hidden=false;errorLine.textContent="دریافت حساب انجام نشد. صفحه را دوباره باز کنید.";}}
+})();
+</script></body></html>

@@ -49,7 +49,53 @@ CREATE TABLE IF NOT EXISTS triage_results (
     model TEXT,
     created_at TEXT NOT NULL
 );
-PRAGMA user_version=2;
+
+CREATE TABLE IF NOT EXISTS users (
+    id TEXT PRIMARY KEY,
+    role TEXT NOT NULL CHECK (role IN ('patient','doctor')),
+    username TEXT UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    patient_id TEXT UNIQUE REFERENCES patients(id) ON DELETE CASCADE,
+    created_at TEXT NOT NULL,
+    CHECK ((role='patient' AND patient_id IS NOT NULL) OR (role='doctor' AND patient_id IS NULL))
+);
+CREATE TABLE IF NOT EXISTS doctors (
+    id TEXT PRIMARY KEY,
+    user_id TEXT UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+    name_fa TEXT NOT NULL,
+    specialty_code TEXT NOT NULL,
+    expertise TEXT NOT NULL,
+    score REAL,
+    verified INTEGER NOT NULL CHECK (verified IN (0,1)),
+    available INTEGER NOT NULL DEFAULT 1 CHECK (available IN (0,1)),
+    last_seen_at TEXT,
+    created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS auth_sessions (
+    token_hash TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS visit_requests (
+    id TEXT PRIMARY KEY,
+    patient_id TEXT NOT NULL REFERENCES patients(id) ON DELETE CASCADE,
+    session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+    specialty_code TEXT NOT NULL,
+    doctor_id TEXT REFERENCES doctors(id),
+    status TEXT NOT NULL CHECK (status IN ('pending','accepted','cancelled','expired')),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    accepted_at TEXT,
+    CHECK ((status='accepted' AND doctor_id IS NOT NULL) OR (status<>'accepted' AND doctor_id IS NULL))
+);
+CREATE INDEX IF NOT EXISTS requests_specialty_status_created ON visit_requests(specialty_code, status, created_at);
+CREATE INDEX IF NOT EXISTS requests_doctor_status ON visit_requests(doctor_id, status);
+CREATE INDEX IF NOT EXISTS requests_patient_created ON visit_requests(patient_id, created_at);
+CREATE UNIQUE INDEX IF NOT EXISTS requests_active_session ON visit_requests(session_id) WHERE status IN ('pending','accepted');
+CREATE INDEX IF NOT EXISTS auth_sessions_user ON auth_sessions(user_id);
+CREATE INDEX IF NOT EXISTS doctors_specialty ON doctors(specialty_code, verified);
+PRAGMA user_version=3;
 """
 
 
@@ -58,7 +104,10 @@ def connect() -> sqlite3.Connection:
     try:
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA foreign_keys=ON")
-        connection.executescript(SCHEMA)
+        connection.execute("PRAGMA secure_delete=ON")
+        # ponytail: no migrations framework; add real migrations before the first column change.
+        if connection.execute("PRAGMA user_version").fetchone()[0] < 3:
+            connection.executescript(SCHEMA)
         return connection
     except BaseException:
         connection.close()

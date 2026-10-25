@@ -47,7 +47,6 @@ def load_file(path: Path) -> dict:
             not isinstance(identifier, str) or not re.fullmatch(r"[a-z0-9_]+", identifier)
             or identifier in ids or not nonempty(doctor.get("name_fa"))
             or not isinstance(doctor.get("specialty_code"), str) or doctor["specialty_code"] not in codes
-            or not isinstance(doctor.get("online"), bool)
             or type(doctor.get("score")) not in (int, float)
             or not math.isfinite(doctor["score"]) or not 0 <= doctor["score"] <= 5
             or not isinstance(doctor.get("expertise"), list)
@@ -64,10 +63,3 @@ def load_file(path: Path) -> dict:
 @cache
 def load_doctors() -> dict:
     return load_file(DATA_FILE)
-
-
-def for_specialty(code: str) -> list[dict]:
-    return sorted(
-        (doctor for doctor in load_doctors()["doctors"] if doctor["specialty_code"] == code),
-        key=lambda doctor: (not doctor["online"], -doctor["score"]),
-    )[:10]

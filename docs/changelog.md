@@ -11,6 +11,12 @@ move them into a dated version section when a release is made.
 
 ### Added
 
+- Slice 4: demo-grade patient/doctor self-registration, scrypt passwords, hashed cookie sessions, login throttle, role/verification/ownership dependencies and no-store API responses.
+- Database-backed seeded/self-registered doctors, polling presence, public specialties, Persian login and doctor dashboard.
+- Broadcast visit requests with expiry/cancellation, a partial active-request index, atomic first acceptance and accepted-doctor-only intake/history/AI projections.
+- Secure-delete/version-gated SQLite initialization, auth/request settings and temporary-database security/authorization/concurrency checks.
+
+
 - Slice 3: optional OpenAI-compatible specialty triage, bounded structured context, validated provider JSON, persistent fallback and idempotent results.
 - Synthetic doctor directory with startup validation, specialty filtering, online/score ordering, and Persian demo cards with loading and retry.
 - LLM environment settings with secret-safe repr and outcome-only logging; network-free config/client/context/triage checks.
@@ -47,7 +53,17 @@ move them into a dated version section when a release is made.
 - Implementation specification and feature template in `docs/plan.md`.
 - This changelog in `docs/changelog.md`.
 
+### Breaking
+
+- Chat and patient history/deletion now require patient cookie authentication; removed the patient_id creation body/ChatResponse field and old /v1/patients/{patient_id}/... routes.
+- Patient history/deletion moved to /v1/me/history and DELETE /v1/me; the demo no longer uses a localStorage patient handle.
+- Doctors now come from schema-v3 SQLite rows; doctors.json is seed data without online fields, online presence is computed and scores may be null. Reset the old disposable synthetic database once.
+
 ### Changed
+
+- Gate schema initialization below version 3 and enable secure_delete on every connection.
+- Retain existing intake/triage behavior while applying account ownership; doctor-only AI fields are now visible only through an accepted request.
+
 
 - Promoted existing httpx to a runtime dependency, removed the dev extra, and updated installation commands.
 - Bumped SQLite schema version to 2 with cascading triage_results; patient deletion also removes triage data.
