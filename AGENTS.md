@@ -13,7 +13,7 @@ These rules apply to the entire repository.
 ## Scope and implementation
 
 - Application code belongs in `src/app/`, checks in `tests/`, and documentation in `docs/`.
-- Only `src/app/`, `src/app/api/`, `src/app/schemas/`, `src/app/agent/`, `src/app/static/`, and `src/app/data/` are approved application folders. Obtain permission before adding any other folder.
+- Only `src/app/`, `src/app/api/`, `src/app/schemas/`, `src/app/agent/`, `src/app/static/`, `src/app/data/`, and `src/app/core/` are approved application folders. Obtain permission before adding any other folder.
 - `models/` and `services/` remain proposals until needed and approved.
 - Choose the smallest correct solution: reuse existing code, then the standard library, native platform features, and installed dependencies before writing new code.
 - Add no speculative abstractions, boilerplate, or dependencies. Fix shared root causes instead of patching individual callers.

@@ -4,7 +4,7 @@ from contextlib import closing
 from dataclasses import asdict
 from uuid import uuid4
 
-from app import db
+from app.core import db
 from app.agent import dictionaries
 from app.agent.intake import Collected, IntakeState, advance, profile_state
 

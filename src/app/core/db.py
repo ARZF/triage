@@ -1,7 +1,7 @@
 import sqlite3
 from datetime import UTC, datetime
 
-from app.config import Settings
+from app.core.config import Settings
 
 # ponytail: stdlib sqlite3, single file, no migrations framework; upgrade to Postgres with SQLAlchemy/Alembic when needed.
 # JSON-text code arrays become join tables when querying by code is needed.

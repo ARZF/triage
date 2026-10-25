@@ -10,19 +10,19 @@ at a time, with an explicit API contract and a runnable check for its behavior.
 ## 2. Current baseline
 
 - Python 3.14 or later; dependencies are FastAPI and Uvicorn.
-- `src/app/main.py` creates the FastAPI application, includes the health router, and configures error handlers and logging.
+- `src/app/main.py` creates the FastAPI application, owns its lifespan, includes routers, and calls the core logging and exception-handler registration functions.
 - `GET /health` returns HTTP 200 with JSON `{"status": "ok"}`.
 - The health endpoint checks application responsiveness only.
 - FastAPI exposes interactive API documentation at `/docs`.
 - The app implements scripted intake, JSON vocabulary, and SQLite patient memory, without an LLM, authentication, diagnosis, or treatment advice.
-- `src/app/config.py` defines frozen settings read from `os.environ`. `APP_LOG_LEVEL` defaults to `INFO`; INFO, WARNING, ERROR, and CRITICAL are accepted (case insensitive). Invalid values fail startup. The application does not load `.env` files.
+- `src/app/core/config.py` defines frozen settings read from `os.environ`. `APP_LOG_LEVEL` defaults to `INFO`; INFO, WARNING, ERROR, and CRITICAL are accepted (case insensitive). Invalid values fail startup. The application does not load `.env` files.
 
 ## 3. Project boundaries
 
 - Put application code in `src/`, runnable checks in `tests/`, and specifications
   and project documentation in `docs/`.
 - Do not create additional folders without the user's permission.
-- The user approved `src/app/`, `src/app/api/`, `src/app/schemas/`, `src/app/agent/`, `src/app/static/`, and `src/app/data/`.
+- The user approved `src/app/`, `src/app/api/`, `src/app/schemas/`, `src/app/agent/`, `src/app/static/`, `src/app/data/`, and `src/app/core/`.
 - `models/` and `services/` are proposed only for when needed; creating them requires permission.
 - Reuse existing code, standard library features, and installed dependencies first.
 - Add no speculative abstractions, integrations, or infrastructure.
@@ -220,8 +220,12 @@ current. Report any unverified behavior or remaining limitations explicitly.
 ## 9. Package structure and verification
 
 - `src/app/__init__.py`, `src/app/api/__init__.py`, and `src/app/schemas/__init__.py`: package markers.
-- `src/app/main.py`: application, logging configuration, and exception handlers.
-- `src/app/config.py`: frozen environment settings.
+- `src/app/main.py`: app creation, lifespan, and router registration.
+- `src/app/core/__init__.py`: approved core package marker.
+- `src/app/core/config.py`: frozen environment settings.
+- `src/app/core/db.py`: SQLite schema, connections, message inserts, and UTC timestamps.
+- `src/app/core/errors.py`: HTTP, validation, and SQLite exception handlers and registration.
+- `src/app/core/logging_config.py`: logging configuration and shared access-log disabling at import and lifespan startup.
 - `src/app/api/health.py`: health endpoint. `chat.py` adds the two /v1/chat POST routes; `demo.py` serves /demo.
 - `src/app/schemas/common.py`: `HealthResponse`, `ErrorResponse`, and its nested error model.
 - `tests/test_health.py`: health and settings checks.
@@ -375,3 +379,27 @@ No commits or pushes were made. No manual visual inspection was performed.
 - Mobile widths 320/375/414/768 passed overflow checks. Uvicorn access logging is disabled.
 - The installed Starlette/httpx deprecation warning remains. Manual visual inspection was not performed.
 - No folders, commits, or pushes were added. The review server uses a temporary verification database; ordinary startup uses APP_DB_PATH or its documented default.
+
+## 13. Core infrastructure refactor
+
+- [x] Approve only src/app/core/ and move config.py and db.py with git mv, without compatibility shims.
+- [x] Move the three exception-handler signatures and bodies verbatim; centralize registration.
+- [x] Move logging setup and share access-log disabling between import-time configuration and lifespan startup.
+- [x] Update all source/test imports and the documented package structure.
+- [x] Run the same unittest discovery before and after: 61 tests pass in both runs.
+- [x] Reinstall the editable dev package and verify live /health, /docs, and /demo return HTTP 200.
+
+### Refactor verification (2026-10-25)
+
+Before editing: Ran 61 tests in 5.176s; OK. After editing: Ran 61 tests in
+8.082s; OK. The existing Starlette/httpx deprecation warning remains.
+Editable installation succeeded using the previously approved process-only
+proxy bypass. Uvicorn started successfully using a dedicated temporary
+APP_DB_PATH; the default database was not created.
+
+Source comparisons confirmed verbatim handler signatures/bodies, unchanged
+settings, and only an import change within the moved database module.
+Invalid APP_LOG_LEVEL still fails at import; HTTP exception headers and
+import-time logging settings are preserved. Searching repository files found
+no old import paths. No behavior, endpoint, schema, setting, error code, or
+message changes were made. No commits or pushes were made.

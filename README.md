@@ -154,9 +154,11 @@ example, enter the generic name `استامینوفن` instead; it is vocabulary
 ## Structure
 
 - `AGENTS.md`: docs-first workflow, project boundaries, semantic commits.
-- `src/app/main.py`: app, exception handlers, logging, and router wiring.
-- `src/app/config.py`: frozen environment settings.
-- `src/app/db.py`: SQLite schema, per-operation connections, and UTC timestamps.
+- `src/app/main.py`: app creation, lifespan, and router wiring.
+- `src/app/core/config.py`: frozen environment settings.
+- `src/app/core/db.py`: SQLite schema, per-operation connections, and UTC timestamps.
+- `src/app/core/errors.py`: shared exception handlers and registration.
+- `src/app/core/logging_config.py`: logging setup and access-log disabling.
 - `src/app/api/health.py`, `chat.py`, `demo.py`, `dictionaries.py`, `patients.py`: HTTP routes.
 - `src/app/schemas/common.py`, `chat.py`, `dictionaries.py`, `patients.py`: request/response models.
 - `src/app/agent/intake.py`: pure immutable scripted state machine.

@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 
 from contextlib import closing
 
-from app.db import connect
+from app.core.db import connect
 from app.main import app
 from app.schemas.common import ErrorResponse
 

@@ -13,9 +13,9 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
-from app import db
+from app.core import db
 from app.agent import dictionaries, sessions
-from app.config import Settings
+from app.core.config import Settings
 from app.main import app
 
 

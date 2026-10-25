@@ -40,6 +40,8 @@ move them into a dated version section when a release is made.
 
 ### Changed
 
+- Moved settings, SQLite infrastructure, exception handlers, and logging setup into the approved core package; updated imports without changing runtime contracts.
+
 - Replaced the capped in-memory session store with per-request closed SQLite connections and atomic message transactions.
 - Moved chat endpoints into FastAPI's threadpool and disabled access logging of patient-id URLs.
 
