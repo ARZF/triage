@@ -7,9 +7,13 @@ name = "healthcare-agent"
 version = "0.1.0"
 description = "FastAPI backend for a healthcare agent."
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.14"
 dependencies = ["fastapi", "uvicorn"]
+
+[project.optional-dependencies]
+dev = ["httpx"]
 
 [tool.setuptools]
 package-dir = {"" = "src"}
-py-modules = ["main"]
+[tool.setuptools.packages.find]
+where = ["src"]

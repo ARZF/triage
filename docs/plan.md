@@ -1,6 +1,6 @@
 # Healthcare Agent: Implementation Plan and Specification
 
-Status: starter specification. The project structure is approved; agent behavior
+Status: package skeleton specification. The project structure is approved; agent behavior
 still needs to be defined. Open decisions below are not implementation requirements.
 
 ## 1. Purpose
@@ -10,21 +10,21 @@ at a time, with an explicit API contract and a runnable check for its behavior.
 
 ## 2. Current baseline
 
-- Python 3.11 or later; dependencies are FastAPI and Uvicorn.
-- `src/main.py` creates the FastAPI application.
+- Python 3.14 or later; dependencies are FastAPI and Uvicorn.
+- `src/app/main.py` creates the FastAPI application, includes the health router, and configures error handlers and logging.
 - `GET /health` returns HTTP 200 with JSON `{"status": "ok"}`.
 - The health endpoint checks application responsiveness only.
 - FastAPI exposes interactive API documentation at `/docs`.
 - No agent, model provider, database, authentication, or external service is implemented.
-- `.env.example` contains comments only; the application does not load `.env` files.
+- `src/app/config.py` defines frozen settings read from `os.environ`. `APP_LOG_LEVEL` defaults to `INFO`; INFO, WARNING, ERROR, and CRITICAL are accepted (case insensitive). Invalid values fail startup. The application does not load `.env` files.
 
 ## 3. Project boundaries
 
 - Put application code in `src/`, runnable checks in `tests/`, and specifications
   and project documentation in `docs/`.
 - Do not create additional folders without the user's permission.
-- Keep source files flat until the code needs more structure and that structure
-  is approved.
+- The user approved `src/app/`, `src/app/api/`, and `src/app/schemas/` for this phase.
+- `models/`, `services/`, and `agent/` are proposed only for when needed; creating them requires permission.
 - Reuse existing code, standard library features, and installed dependencies first.
 - Add no speculative abstractions, integrations, or infrastructure.
 - Keep this plan consistent with implemented behavior; label proposed behavior clearly.
@@ -86,6 +86,10 @@ Complete this section for each agreed feature before writing its code:
 - [x] Create `src/`, `tests/`, and `docs/`.
 - [x] Add dependency configuration, setup instructions, and a minimal FastAPI app.
 - [x] Add this starter specification.
+- [x] Move the application into the approved `app` package and remove `src/main.py`.
+- [x] Add environment settings, typed responses, a health router, generic HTTP/validation errors, and basic logging.
+- [x] Add unittest checks and the optional `httpx` dev dependency.
+- [x] Verify installation, tests, and live `/health` and `/docs` responses for the skeleton.
 - [ ] Define the first workflow and resolve its relevant open decisions.
 - [ ] Write and approve its feature specification and acceptance examples.
 - [ ] Implement the smallest complete workflow in `src/`.
@@ -97,3 +101,44 @@ Complete this section for each agreed feature before writing its code:
 The agreed acceptance examples work, the relevant runnable check passes, errors
 follow the documented contract, and configuration and usage instructions are
 current. Report any unverified behavior or remaining limitations explicitly.
+
+## 9. Package structure and verification
+
+- `src/app/__init__.py`, `src/app/api/__init__.py`, and `src/app/schemas/__init__.py`: package markers.
+- `src/app/main.py`: application, logging configuration, and exception handlers.
+- `src/app/config.py`: frozen environment settings.
+- `src/app/api/health.py`: the only application endpoint, `GET /health`.
+- `src/app/schemas/common.py`: `HealthResponse`, `ErrorResponse`, and its nested error model.
+- `tests/test_health.py`: health and settings checks.
+- `tests/test_errors.py`: unknown path, validation privacy, and HTTP exception privacy checks.
+
+`HealthResponse` fixes status to `ok`. HTTP errors use the shared error shape
+`{"error": {"code": "http_404", "message": "Not Found"}}` with the actual status
+and standard status message. Validation errors return HTTP 422 with code
+`validation_error` and message `Request validation failed`. Handlers do not
+return exception details or request input. Basic logging does not log request
+bodies or headers; HTTP client debug logging is suppressed.
+
+From the project root in PowerShell (create `.venv` first if absent):
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -e ".[dev]"
+.\.venv\Scripts\python.exe -m unittest discover tests
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --app-dir src
+```
+
+With the server running, use another terminal:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/health
+(Invoke-WebRequest http://127.0.0.1:8000/docs).StatusCode
+```
+
+Expected: health returns `status: ok`; documentation responds with HTTP 200.
+The virtual environment and installer outputs are generated tooling artifacts,
+not additional application architecture folders.
+
+Verification completed on 2026-10-25 with Python 3.14.7: editable dev install
+succeeded, all five unittest checks passed, and live /health and /docs returned HTTP 200. The installed Starlette version warns that its httpx
+TestClient integration is deprecated; the requested httpx dependency is retained.
