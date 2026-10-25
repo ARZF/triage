@@ -1,7 +1,8 @@
 # Healthcare Agent
 
-Slices 1a and 2a provide scripted intake and vocabulary matching using synthetic data only. No LLM,
-database, authentication, diagnosis, or treatment advice is implemented.
+Slices 1a, 2a, and 2b provide scripted intake, vocabulary matching, and SQLite
+patient memory using synthetic data only. No LLM, authentication, diagnosis,
+or treatment advice is implemented.
 
 ## Setup
 
@@ -14,8 +15,7 @@ python -m venv .venv
 ```
 
 Open [the demo](http://127.0.0.1:8000/demo) or
-[API documentation](http://127.0.0.1:8000/docs). Use one server process;
-in-memory sessions are not shared across workers.
+[API documentation](http://127.0.0.1:8000/docs). SQLite stores visits across page reloads and server restarts.
 
 ## Demo walkthrough (Persian)
 
@@ -58,7 +58,8 @@ The list remains starter vocabulary that has not been clinically reviewed.
 ## API
 
 - `GET /health`: 200 with `{"status": "ok"}`; responsiveness only.
-- `POST /v1/chat/sessions`: 201 with a new session and welcome message.
+- `POST /v1/chat/sessions`: 201 with a new session and welcome message; optional
+  body `{patient_id: str|null}` (maximum 64 characters), unknown id returns 404.
 - `POST /v1/chat/sessions/{session_id}/messages`: accepts `{"message": "30"}`
   (1-2000 characters) and returns 200 with the updated session.
 - `GET /v1/dictionaries/{kind}?q=&limit=`: read-only symptom or medicine vocabulary.
@@ -68,7 +69,7 @@ The list remains starter vocabulary that has not been clinically reviewed.
 - `GET /demo`: packaged self-contained HTML; inline CSS/JS, no CDN or build step.
 - `GET /docs`: interactive API documentation.
 
-Both chat POST routes return `{session_id, reply, step, done, emergency, collected, matched}`.
+Both chat POST routes return `{session_id, patient_id, returning, reply, step, done, emergency, collected, matched}`.
 `matched` contains `symptoms` and `medicines` lists, each containing only
 `{code, name_fa}` entries. Matches are computed from the accepted symptom and
 medication answers for every response; the intake state machine is unchanged.
@@ -81,11 +82,46 @@ Text must be non-empty; `no` and `none` are valid medication/allergy answers.
 Persian and Arabic-Indic digits are accepted alongside ASCII digits. Confirmation accepts بله/خیر/نه and English yes/no. Normal completion keeps
 `step=confirm`; a red-flag stop keeps `step=symptoms`.
 
-Unknown/evicted sessions return 404; invalid bodies return 422. All HTTP and
+Unknown sessions or patients return 404; invalid bodies return 422. All HTTP and
 validation errors use `{"error": {"code": "...", "message": "..."}}`.
 HTTP errors use code `http_<status>` and the standard status message.
 Validation uses `validation_error` and `Request validation failed`.
 Handlers do not echo input or exception details.
+
+
+## Returning patients and stored history
+
+Session creation optionally accepts `{"patient_id": "existing-id"}`; no body
+still creates a patient. Responses include `patient_id` and `returning`.
+The demo keeps only this opaque id in localStorage, guarded with try/catch.
+If storage is unavailable, the current page still works using memory. Reset
+starts another session for the same patient. An unknown stored id is cleared
+after a 404 and session creation retries without it.
+
+A previous completed, non-emergency visit qualifies a patient for the
+`profile` step. The Persian welcome-back shows their previous age in Persian
+digits, medications, and allergies. Confirming with yes skips directly through
+symptoms, duration, severity, and final confirmation. Rejecting the profile
+clears the prefill and starts a full intake at age. Emergency and unfinished
+visits do not qualify. The internal `returning_profile` field is never exposed.
+
+`GET /v1/patients/{patient_id}/history?limit=10` returns a newest-first list of
+visits; limit is 1-50. Each visit contains session_id, created_at, done,
+emergency, collected, matched, and messages (role, content, created_at).
+The demo's collapsible history excludes its current session and shows prior
+dates, symptoms, and vocabulary chips. History uses stored dictionary codes;
+removed codes remain visible using the code as the name. Live chat matching
+continues to use current dictionaries.
+
+`DELETE /v1/patients/{patient_id}` returns 204 and removes the patient and all
+associated sessions and messages; unknown ids return 404. The demo's Persian
+forget-me button calls this endpoint, clears its local id, and starts fresh.
+This handle is not authentication.
+
+SQLite saves an initial bot message and each later user/bot pair. A symptom
+answer that triggers the fixed red-flag stop is replaced in the message log
+by a fixed Persian placeholder; the triggering text is not stored in collected
+data or code arrays. Further messages to completed sessions change nothing.
 
 ## Vocabulary dictionaries
 
@@ -120,16 +156,18 @@ example, enter the generic name `استامینوفن` instead; it is vocabulary
 - `AGENTS.md`: docs-first workflow, project boundaries, semantic commits.
 - `src/app/main.py`: app, exception handlers, logging, and router wiring.
 - `src/app/config.py`: frozen environment settings.
-- `src/app/api/health.py`, `chat.py`, `demo.py`, `dictionaries.py`: HTTP routes.
-- `src/app/schemas/common.py`, `chat.py`, `dictionaries.py`: request/response models.
+- `src/app/db.py`: SQLite schema, per-operation connections, and UTC timestamps.
+- `src/app/api/health.py`, `chat.py`, `demo.py`, `dictionaries.py`, `patients.py`: HTTP routes.
+- `src/app/schemas/common.py`, `chat.py`, `dictionaries.py`, `patients.py`: request/response models.
 - `src/app/agent/intake.py`: pure immutable scripted state machine.
-- `src/app/agent/sessions.py`: bounded in-memory session dict.
+- `src/app/agent/sessions.py`: transactional session storage, history, and deletion.
 - `src/app/agent/dictionaries.py`: validated loading, normalization, matching, and search.
 - `src/app/data/symptoms.json`, `medicines.json`: starter vocabulary sources.
 - `src/app/static/index.html`: responsive demo page.
 - `tests/test_health.py`, `test_errors.py`: health, settings, and error checks.
 - `tests/test_intake.py`, `test_chat_api.py`: intake, chat, and demo checks.
 - `tests/test_dictionaries.py`: dictionary validation, caching, matching, and API checks.
+- `tests/test_persistence.py`: temporary-database persistence, profile, history, cascade, and transaction checks.
 - `docs/plan.md`: approved specifications and implementation checklist.
 - `docs/changelog.md`: notable changes.
 
@@ -138,13 +176,27 @@ example, enter the generic name `استامینوفن` instead; it is vocabulary
 `APP_LOG_LEVEL` defaults to `INFO`; allowed values are INFO, WARNING, ERROR,
 and CRITICAL (case insensitive). Invalid values fail startup. Set it in the
 process environment, for example `$env:APP_LOG_LEVEL = "WARNING"`.
-Settings are read at import; `.env` files are not loaded. See `.env.example`.
+Logging settings are read at import; `.env` files are not loaded. See `.env.example`.
 Keep credentials out of source control. Message contents, collected data,
 and request bodies/headers are not logged.
 
-The store holds at most 1000 sessions and evicts the oldest created session.
-Reset creates a new session without deleting the previous one. State is lost
-on restart. Database persistence belongs to the future EHR slice.
+`APP_DB_PATH` defaults to `healthcare_agent.db` and must be non-empty. It is read
+from the process environment every time a connection opens; `.env` is not loaded.
+For example: `$env:APP_DB_PATH = "synthetic-demo.db"`.
+Schema creation is idempotent on every connection and app startup, with foreign
+keys enabled and schema version 1. Connections close after each operation;
+message handling uses a single `BEGIN IMMEDIATE` transaction. Chat endpoints
+are synchronous so SQLite runs in FastAPI's threadpool.
+
+There is no session cap or automatic expiry. Storage is SQLite; retention is
+none (manual deletion only). Reset preserves prior visits. The database and its
+journal/WAL/shared-memory files are ignored by Git. Keep backups and paths under
+your control; no backup or migration system is implemented.
+
+**Synthetic data only. Authentication, encryption at rest, consent, retention
+rules, and audit are NOT implemented and are required before real patient data.**
+Uvicorn access logging is disabled because patient ids appear in endpoint paths.
+The application does not log ids, request contents, or collected data.
 
 ## Verification
 
@@ -152,7 +204,8 @@ on restart. Database persistence belongs to the future EHR slice.
 .\.venv\Scripts\python.exe -m unittest discover tests
 ```
 
-Tests use synthetic data; temporary error-test routes are isolated from the
+Tests use synthetic data and temporary database files only; they never use the
+default database file. Temporary error-test routes are isolated from the
 production API. The installed Starlette version emits an httpx deprecation
 warning; the requested dependency is retained.
 

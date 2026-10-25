@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field, replace
 from typing import Literal
 
-Step = Literal["age", "symptoms", "duration", "severity", "medications", "allergies", "confirm"]
+Step = Literal["profile", "age", "symptoms", "duration", "severity", "medications", "allergies", "confirm"]
 QUESTIONS = {
     "age": "سن بیمار فرضی چند سال است؟ (۰ تا ۱۲۰)",
     "symptoms": "بیمار فرضی چه علائمی دارد؟",
@@ -12,6 +12,7 @@ QUESTIONS = {
     "confirm": "آیا اطلاعات درست است؟ برای پایان «بله» و برای شروع دوباره «خیر» بنویسید.",
 }
 STEPS = tuple(QUESTIONS)
+QUESTIONS["profile"] = "آیا سن، داروها و حساسیت‌های قبلی همچنان درست هستند؟ «بله» یا «خیر» بنویسید."
 WELCOME = "خوش آمدید! این یک نسخهٔ نمایشی است؛ فقط از داده‌های ساختگی استفاده کنید. نام یا اطلاعات شناسایی وارد نکنید."
 EMERGENCY_REPLY = "لطفاً همین حالا با خدمات اورژانس محل خود تماس بگیرید. این نسخهٔ نمایشی نمی‌تواند کمک اضطراری ارائه کند."
 COMPLETE_REPLY = "ثبت اطلاعات ساختگی به پایان رسید. این نسخهٔ نمایشی تشخیص یا توصیهٔ درمانی ارائه نمی‌کند."
@@ -39,10 +40,21 @@ class Collected:
 @dataclass(frozen=True)
 class IntakeState:
     step: Step = "age"
+    returning_profile: bool = False
     done: bool = False
     emergency: bool = False
     collected: Collected = field(default_factory=Collected)
     reply: str = WELCOME + "\n\n" + QUESTIONS["age"]
+
+
+def profile_state(prefill: Collected) -> IntakeState:
+    age = str(prefill.age).translate(str.maketrans("0123456789", "۰۱۲۳۴۵۶۷۸۹"))
+    reply = (
+        f"خوش آمدید! اطلاعات قبلی شما در این نسخهٔ نمایشی: سن {age} سال؛ "
+        f"داروها: {prefill.medications}؛ حساسیت‌ها: {prefill.allergies}. "
+        + QUESTIONS["profile"]
+    )
+    return IntakeState(step="profile", collected=prefill, reply=reply)
 
 
 def advance(state: IntakeState, message: str) -> tuple[IntakeState, str]:
@@ -61,7 +73,7 @@ def advance(state: IntakeState, message: str) -> tuple[IntakeState, str]:
             value = int(answer)
         else:
             hint = "عدد صحیح بین ۰ تا ۱۲۰ وارد کنید." if step == "age" else "عدد صحیح بین ۱ تا ۱۰ وارد کنید."
-    elif step == "confirm":
+    elif step in ("confirm", "profile"):
         if normalized not in ("yes", "no", "بله", "خیر", "نه"):
             hint = "لطفاً «بله» یا «خیر» بنویسید."
     elif not answer:
@@ -69,6 +81,11 @@ def advance(state: IntakeState, message: str) -> tuple[IntakeState, str]:
 
     if hint:
         updated = replace(state, reply=hint + " " + QUESTIONS[step])
+    elif step == "profile":
+        updated = (
+            replace(state, step="symptoms", returning_profile=True, reply=QUESTIONS["symptoms"])
+            if normalized in ("yes", "بله") else IntakeState()
+        )
     elif step == "symptoms" and any(phrase in normalized for phrase in RED_FLAGS):
         updated = replace(state, done=True, emergency=True, reply=EMERGENCY_REPLY)
     elif step == "confirm":
@@ -78,7 +95,7 @@ def advance(state: IntakeState, message: str) -> tuple[IntakeState, str]:
             else IntakeState(reply="دوباره شروع می‌کنیم. " + QUESTIONS["age"])
         )
     else:
-        next_step = STEPS[STEPS.index(step) + 1]
+        next_step = "confirm" if state.returning_profile and step == "severity" else STEPS[STEPS.index(step) + 1]
         updated = replace(
             state,
             step=next_step,

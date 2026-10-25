@@ -1,6 +1,6 @@
 # Healthcare Agent: Implementation Plan and Specification
 
-Status: Slices 1a and 2a approved. Scripted intake, Persian demo, and JSON vocabulary matching are in scope; future workflow decisions remain proposals.
+Status: Slices 1a, 2a, and 2b approved. Scripted intake, Persian demo, JSON vocabulary matching, and SQLite patient memory are in scope; future workflow decisions remain proposals.
 
 ## 1. Purpose
 
@@ -14,7 +14,7 @@ at a time, with an explicit API contract and a runnable check for its behavior.
 - `GET /health` returns HTTP 200 with JSON `{"status": "ok"}`.
 - The health endpoint checks application responsiveness only.
 - FastAPI exposes interactive API documentation at `/docs`.
-- Slice 1a implements scripted intake and demo chat, without an LLM, model provider, database, authentication, diagnosis, or treatment advice.
+- The app implements scripted intake, JSON vocabulary, and SQLite patient memory, without an LLM, authentication, diagnosis, or treatment advice.
 - `src/app/config.py` defines frozen settings read from `os.environ`. `APP_LOG_LEVEL` defaults to `INFO`; INFO, WARNING, ERROR, and CRITICAL are accepted (case insensitive). Invalid values fail startup. The application does not load `.env` files.
 
 ## 3. Project boundaries
@@ -28,7 +28,10 @@ at a time, with an explicit API contract and a runnable check for its behavior.
 - Add no speculative abstractions, integrations, or infrastructure.
 - Keep this plan consistent with implemented behavior; label proposed behavior clearly.
 
-## 4. Decisions for future slices beyond the approved scripted demo
+## 4. Decisions for persistence and future slices
+
+- **Slice 2b decisions:** storage = SQLite; retention = none (manual deletion only).
+- **Real-data prerequisites:** authentication, encryption at rest, consent, retention rules, and audit are NOT implemented; all are required before any real patient data.
 
 - **First workflow:** What task should the agent complete, and for whom?
 - **Clinical scope:** Is the task administrative, educational, or clinical?
@@ -155,6 +158,24 @@ Complete this section for each agreed feature before writing its code:
 - **Configuration:** load symptoms and medicines before session creation, at most 100 entries per dictionary. JSON remains the source of truth.
 - **Acceptance examples:** select two names and add a custom name, remove one, then submit the remaining names together; repeated selection adds no duplicate; none is exclusive; Reset clears drafts; valid known names produce separate matched chips.
 - **Runnable check:** unittest discovery covers all generic default medicine names and a multi-name intake; automated browser checks verify adding, removing, duplicates, none, length validation, keyboard entry, pending input, and mobile layout.
+
+
+### Feature: Slice 2b - SQLite patient memory, profiles, history, and deletion
+
+- **Status:** approved.
+- **User outcome:** a returning synthetic patient can confirm their previous age, medications, and allergies, review prior visits, and delete all stored data.
+- **Scope:** stdlib sqlite3 persistence in flat existing folders only; no new dependencies, authentication, LLM, or clinical logic.
+- **API contract:** POST /v1/chat/sessions accepts an optional body {patient_id: str|null, max_length: 64}; no body creates a new patient, unknown id returns 404. Chat responses add patient_id and returning. GET /v1/patients/{patient_id}/history?limit= returns a newest-first list of visits, with limit 1-50/default 10. DELETE /v1/patients/{patient_id} returns 204 and cascades through sessions/messages; unknown patients return 404. Shared ErrorResponse applies to HTTP, validation, and storage failures.
+- **Validation:** APP_DB_PATH defaults to healthcare_agent.db and must be non-empty; read Settings() at every connection. Existing message, dictionary, and intake validation continues. Tests always override the database path to a temporary file.
+- **Agent behavior:** new patients start the existing full intake. A prior completed, non-emergency visit qualifies a returning patient: prefill age/medications/allergies from the most recently completed qualifying visit and start at profile with a fixed Persian welcome-back and age in Persian digits. Yes confirms the profile, sets internal returning_profile=true, and asks symptoms/duration/severity/confirm only. No discards the prefill and starts the full intake at age. Handle profile explicitly outside sequential STEPS; build responses from named public fields.
+- **Persistence:** patients, sessions, messages, UTC ISO-8601 timestamps, foreign-key cascades, requested indexes, and user_version=1. Initialize tables idempotently on connection and in lifespan. Use one explicitly closed connection per request and BEGIN IMMEDIATE for each message read/advance/write/log transaction. Completed sessions never update or append messages.
+- **Stored vocabulary and logs:** persist symptom/medicine code arrays when the corresponding collected answer changes; history resolves stored codes using current names, falling back to the code if removed. Live chat matches still use current answer matching. Store initial bot reply and each user/bot pair; replace an emergency-triggering user message with a fixed Persian placeholder, never its text.
+- **Failure behavior:** rollback failed transactions and explicitly close every connection, including initialization failures. History/deletion reject unknown patients. Stale demo patient ids receive 404, are cleared locally, and retry as a new patient. localStorage access is guarded and the demo works without it.
+- **Access and data handling:** synthetic data only. Storage = SQLite; retention = none (manual deletion only). Authentication, encryption at rest, consent, retention rules, and audit are NOT implemented and are required before real patient data. Do not log messages, collected data, or patient ids; disable Uvicorn access logging.
+- **Configuration:** APP_DB_PATH controls the local file; ignore *.db and its journal/WAL/shared-memory companions. No new folders. Stdlib single-file SQLite has no migration framework; upgrade to Postgres/SQLAlchemy/Alembic when needed, and code JSON arrays become join tables when code querying is needed.
+- **Demo:** persist only patient_id in guarded localStorage; Reset starts another session for the same patient. Show returning note, profile yes/no choices, collapsible visit history with dates/symptoms/matched chips, and a Persian forget-me button that deletes patient data and starts fresh. Use textContent throughout.
+- **Acceptance examples:** a completed intake survives fresh connections; reload shows profile and previous values; yes skips medication/allergy questions, no restarts age. Emergency/unfinished visits do not qualify. Red-flag text appears in no table. History retains missing dictionary codes. Forget-me cascades and stale local ids recover.
+- **Runnable check:** unittest discovery uses temporary SQLite files for all database-capable tests; cover persistence, profile paths, history/order/bounds, redaction, atomicity, deletion, settings overrides, and no-body compatibility. Reinstall, run Uvicorn, and exercise complete/reload/profile/history/forget-me in the demo.
 
 ## 6. Coding and verification rules
 
@@ -328,3 +349,29 @@ choice changes, final submission, and separate matched medicine chips.
 Mobile widths 320/375/414/768 and the earlier symptom/chip flows passed.
 No API fields, intake behavior, folders, or dependencies were changed.
 No commits or pushes were made. No manual visual inspection was performed.
+
+## 12. Slice 2b implementation checklist
+
+- [x] Record approved SQLite/manual-deletion/privacy decisions before implementation.
+- [x] Add DB-path settings, ignore rules, schema, UTC timestamps, indexes, and explicit connection cleanup.
+- [x] Replace the in-memory store with atomic SQLite transactions and redacted message logs.
+- [x] Add pure profile confirmation, returning-patient lookup, stored-code history, and cascade deletion.
+- [x] Convert chat routes to synchronous handlers and build named public response fields.
+- [x] Add guarded demo patient memory, profile choices, history, and forget-me.
+- [x] Convert all database-capable tests to temporary files and remove the obsolete eviction test.
+- [x] Run 61 unittest checks, including rollback, initialization cleanup, and concurrent-message coverage.
+- [x] Reinstall editable dev package and run the final full suite.
+- [x] Verify complete/reload/profile/history/forget-me and unavailable storage in the browser.
+- [x] Record verification output and stop without commits or pushes.
+
+### Slice 2b verification (2026-10-25)
+
+- Editable dev installation succeeded with no new dependencies.
+- All 61 unittest tests passed using temporary databases only. The default healthcare_agent.db file was never opened or created by verification.
+- Covered persisted sessions, ordered messages/codes, profile yes/no paths, emergency/unfinished exclusions, stored-code fallback, history bounds/order/404, cascade deletion, no-body compatibility, connection cleanup, atomic rollback, and concurrent messages.
+- Uvicorn started with a dedicated temporary APP_DB_PATH for browser verification.
+- Automated Chrome completed an intake, reloaded into the same patient's Persian profile, displayed prefilled data/history/chips, verified profile confirmation/rejection, and used forget-me to remove the old patient's history and start fresh.
+- Stale/corrupt stored ids and localStorage throwing on read/write/remove were exercised; intake, same-patient Reset, and forget-me continued working.
+- Mobile widths 320/375/414/768 passed overflow checks. Uvicorn access logging is disabled.
+- The installed Starlette/httpx deprecation warning remains. Manual visual inspection was not performed.
+- No folders, commits, or pushes were added. The review server uses a temporary verification database; ordinary startup uses APP_DB_PATH or its documented default.

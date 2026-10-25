@@ -7,6 +7,11 @@ move them into a dated version section when a release is made.
 
 ### Added
 
+- Slice 2b: SQLite patients, sessions, redacted message logs, stored vocabulary codes, UTC timestamps, schema initialization, indexes, and cascade deletion.
+- Returning-patient profile confirmation, public patient ids, stored-code visit history, and forget-me endpoints.
+- Guarded demo patient-id storage, Persian welcome-back, collapsible history, and forget-me behavior.
+- APP_DB_PATH, ignored SQLite artifacts, temporary-database tests, rollback/concurrency checks, and explicit synthetic-only privacy prerequisites.
+
 - JSON-backed default medicine choices and an editable multi-medicine list with custom names, removal, duplicate prevention, exclusive none, and message-length validation.
 
 - Connected the symptom dropdown to the JSON-backed dictionary endpoint, showing the starter symptom names while preserving custom entry.
@@ -34,6 +39,9 @@ move them into a dated version section when a release is made.
 - This changelog in `docs/changelog.md`.
 
 ### Changed
+
+- Replaced the capped in-memory session store with per-request closed SQLite connections and atomic message transactions.
+- Moved chat endpoints into FastAPI's threadpool and disabled access logging of patient-id URLs.
 
 - Localized the demo and scripted intake replies into Persian with RTL layout, Persian number display, Persian/Arabic-Indic input digits, Persian confirmation answers, and translated red-flag phrases.
 

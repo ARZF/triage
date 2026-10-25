@@ -18,3 +18,9 @@ venv/
 .mypy_cache/
 .coverage
 htmlcov/
+
+# Local SQLite data
+*.db
+*.db-journal
+*.db-wal
+*.db-shm

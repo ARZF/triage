@@ -1,4 +1,6 @@
 import logging
+import sqlite3
+from contextlib import closing
 from contextlib import asynccontextmanager
 from http.client import responses
 
@@ -13,6 +15,8 @@ from app.api.demo import router as demo_router
 from app.api.dictionaries import router as dictionary_router
 from app.agent.dictionaries import load_dictionaries
 from app.config import Settings
+from app.db import connect
+from app.api.patients import router as patient_router
 from app.schemas.common import ErrorDetail, ErrorResponse
 
 settings = Settings()
@@ -23,10 +27,14 @@ logging.basicConfig(
 # Keep HTTP client diagnostics from logging headers at DEBUG level.
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
+logging.getLogger("uvicorn.access").disabled = True
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     load_dictionaries()
+    logging.getLogger("uvicorn.access").disabled = True
+    with closing(connect()):
+        pass
     yield
 
 
@@ -35,6 +43,7 @@ app.include_router(router)
 app.include_router(chat_router)
 app.include_router(demo_router)
 app.include_router(dictionary_router)
+app.include_router(patient_router)
 
 
 @app.exception_handler(HTTPException)
@@ -60,3 +69,9 @@ async def validation_error_handler(
         error=ErrorDetail(code="validation_error", message="Request validation failed")
     )
     return JSONResponse(status_code=422, content=error.model_dump())
+
+
+@app.exception_handler(sqlite3.Error)
+async def storage_error_handler(request: Request, exc: sqlite3.Error) -> JSONResponse:
+    error = ErrorResponse(error=ErrorDetail(code="storage_error", message="Storage operation failed"))
+    return JSONResponse(status_code=500, content=error.model_dump())

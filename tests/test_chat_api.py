@@ -1,18 +1,28 @@
+from unittest.mock import patch
+from pathlib import Path
+import tempfile
+import os
 import unittest
 from uuid import UUID
 
 from fastapi.testclient import TestClient
 
-from app.agent import sessions
+from contextlib import closing
+
+from app.db import connect
 from app.main import app
 from app.schemas.common import ErrorResponse
 
 
 class ChatApiTests(unittest.TestCase):
     def setUp(self):
-        sessions.SESSIONS.clear()
-        self.addCleanup(sessions.SESSIONS.clear)
+        self.db_path = Path(self.enterContext(tempfile.TemporaryDirectory())) / "test.db"
+        self.enterContext(patch.dict(os.environ, {"APP_DB_PATH": str(self.db_path)}))
         self.client = self.enterContext(TestClient(app))
+
+    def stored_session(self, session_id):
+        with closing(connect()) as connection:
+            return connection.execute("SELECT * FROM sessions WHERE id=?", (session_id,)).fetchone()
 
     def create(self):
         response = self.client.post("/v1/chat/sessions")
@@ -98,27 +108,16 @@ class ChatApiTests(unittest.TestCase):
                         "code": "validation_error", "message": "Request validation failed"
                     }
                 })
-                self.assertIsNone(sessions.SESSIONS[session_id].collected.age)
+                self.assertIsNone(self.stored_session(session_id)["age"])
         response = self.message(session_id, " ")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["step"], "age")
-
-    def test_oldest_created_session_is_evicted_at_cap(self):
-        first_id, _ = sessions.create_session()
-        for _ in range(sessions.MAX_SESSIONS - 1):
-            sessions.create_session()
-        sessions.send_message(first_id, "30")
-        latest_id, _ = sessions.create_session()
-        self.assertEqual(len(sessions.SESSIONS), 1000)
-        self.assertNotIn(first_id, sessions.SESSIONS)
-        self.assertIn(latest_id, sessions.SESSIONS)
-        self.assertEqual(self.message(first_id, "synthetic").status_code, 404)
 
     def test_sessions_are_isolated(self):
         first = self.create()["session_id"]
         second = self.create()["session_id"]
         self.message(first, "30")
-        self.assertIsNone(sessions.SESSIONS[second].collected.age)
+        self.assertIsNone(self.stored_session(second)["age"])
 
     def test_demo_is_self_contained_html(self):
         response = self.client.get("/demo")

@@ -131,3 +131,31 @@ class IntakeTests(unittest.TestCase):
                 self.assertTrue(state.done)
                 self.assertIsNone(state.collected.symptoms)
                 self.assertEqual(reply, EMERGENCY_REPLY)
+
+    def test_returning_profile_is_explicit_and_does_not_enter_steps(self):
+        from app.agent.intake import STEPS, profile_state
+        self.assertNotIn("profile", STEPS)
+        prefill = Collected(age=30, medications="synthetic medication", allergies="none")
+        initial = profile_state(prefill)
+        self.assertIn("۳۰", initial.reply)
+        invalid, _ = advance(initial, "maybe")
+        self.assertEqual(invalid.step, "profile")
+        self.assertEqual(invalid.collected, prefill)
+        state, _ = advance(initial, "بله")
+        self.assertTrue(state.returning_profile)
+        for answer, step in (("cough", "duration"), ("two days", "severity"), ("3", "confirm")):
+            state, _ = advance(state, answer)
+            self.assertEqual(state.step, step)
+        self.assertEqual(state.collected.medications, prefill.medications)
+        state, _ = advance(state, "yes")
+        self.assertTrue(state.done)
+        self.assertEqual(initial.collected, prefill)
+
+    def test_profile_rejection_discards_prefill(self):
+        from app.agent.intake import profile_state
+        initial = profile_state(Collected(age=30, medications="synthetic", allergies="none"))
+        for answer in ("no", "خیر", "نه"):
+            state, _ = advance(initial, answer)
+            self.assertEqual(state.step, "age")
+            self.assertEqual(state.collected, Collected())
+            self.assertFalse(state.returning_profile)

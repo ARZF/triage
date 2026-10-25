@@ -9,6 +9,10 @@ class MessageRequest(BaseModel):
     message: str = Field(min_length=1, max_length=2000)
 
 
+class SessionRequest(BaseModel):
+    patient_id: str | None = Field(default=None, max_length=64)
+
+
 class Matched(BaseModel):
     symptoms: list[MatchedEntry]
     medicines: list[MatchedEntry]
@@ -16,6 +20,8 @@ class Matched(BaseModel):
 
 class ChatResponse(BaseModel):
     session_id: str
+    patient_id: str
+    returning: bool
     reply: str
     step: Step
     done: bool

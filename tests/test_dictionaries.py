@@ -1,3 +1,5 @@
+import tempfile
+import os
 import copy
 import json
 import unittest
@@ -12,6 +14,8 @@ from app.main import app
 
 class DictionaryTests(unittest.TestCase):
     def setUp(self):
+        self.db_path = Path(self.enterContext(tempfile.TemporaryDirectory())) / "test.db"
+        self.enterContext(patch.dict(os.environ, {"APP_DB_PATH": str(self.db_path)}))
         self.document = {
             "status": dictionaries.STATUS,
             "entries": [{
@@ -145,6 +149,8 @@ class DictionaryTests(unittest.TestCase):
 
 class DictionaryApiTests(unittest.TestCase):
     def setUp(self):
+        self.db_path = Path(self.enterContext(tempfile.TemporaryDirectory())) / "test.db"
+        self.enterContext(patch.dict(os.environ, {"APP_DB_PATH": str(self.db_path)}))
         self.client = self.enterContext(TestClient(app))
 
     def test_dictionary_endpoint_without_query_and_with_limit(self):

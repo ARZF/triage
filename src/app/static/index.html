@@ -24,6 +24,14 @@
     header { display: flex; justify-content: space-between; align-items: center; gap: var(--space-md); margin-bottom: var(--space-lg); }
     h1 { margin: 0; font: 500 clamp(28px, 5vw, 40px)/1.2 var(--font-display); }
     header p { color: var(--muted); margin: var(--space-sm) 0 0; }
+    .actions { display: flex; gap: var(--space-sm); flex-wrap: wrap; }
+    #forget { background: transparent; color: var(--danger); border-color: var(--danger); }
+    #returning-note { padding: var(--space-md); border: 1px solid var(--line); background: var(--tint); }
+    #history { margin-top: var(--space-lg); border-top: 1px solid var(--line); padding-top: var(--space-md); }
+    #history summary { cursor: pointer; min-height: 44px; }
+    .history-visit { border-top: 1px solid var(--line); padding: var(--space-md) 0; }
+    .history-visit p { margin: var(--space-sm) 0; overflow-wrap: anywhere; }
+    .history-chips { display: flex; flex-wrap: wrap; gap: var(--space-sm); }
     #reset { color: var(--ink); background: transparent; border-color: var(--line); }
     main { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: var(--space-lg); align-items: start; }
     .chat, aside { min-width: 0; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
@@ -66,7 +74,8 @@
     footer { margin-top: var(--space-md); }
     @media (max-width: 720px) {
       .shell { padding: var(--space-lg) var(--space-md); }
-      header { align-items: flex-start; }
+      header { flex-direction: column; align-items: stretch; }
+      .actions button { flex: 1; }
       main { grid-template-columns: minmax(0, 1fr); }
       #messages { height: 340px; padding: var(--space-md); }
       form, .chat-heading { padding: var(--space-md); }
@@ -80,8 +89,11 @@
   <div class="shell">
     <header>
       <div><h1>پذیرش بیمار</h1><p>گفت‌وگویی از پیش تعیین‌شده؛ فقط از اطلاعات ساختگی استفاده کنید.</p></div>
-      <button id="reset" type="button">شروع دوباره</button>
+      <div class="actions"><button id="reset" type="button">شروع دوباره</button>
+        <button id="forget" type="button" disabled>فراموشم کن</button>
+      </div>
     </header>
+    <p id="returning-note" hidden role="status">مراجعهٔ مجدد — اطلاعات قبلی را بررسی کنید.</p>
     <main>
       <section class="chat" aria-label="گفت‌وگوی پذیرش">
         <div class="chat-heading"><strong>گفت‌وگو</strong><span id="status" role="status">در حال شروع...</span></div>
@@ -109,10 +121,14 @@
         <dl id="collected"></dl>
         <div id="matched-symptoms" class="matches" role="list" aria-label="واژه‌های علائم شناسایی‌شده" aria-live="polite"></div>
         <div id="matched-medicines" class="matches" role="list" aria-label="نام داروهای شناسایی‌شده" aria-live="polite"></div>
+        <details id="history">
+          <summary>مراجعات قبلی</summary>
+          <div id="visit-history" aria-live="polite"></div>
+        </details>
         <p class="vocabulary-note">فهرست واژگان اولیه است و از نظر بالینی بررسی نشده است.</p>
       </aside>
     </main>
-    <footer>این نسخه فقط نمایشی است و تشخیص یا توصیهٔ درمانی ارائه نمی‌کند. اطلاعات در حافظه نگه‌داری می‌شوند و با راه‌اندازی دوبارهٔ سرور از بین می‌روند.</footer>
+    <footer>این نسخه فقط نمایشی است و تشخیص یا توصیهٔ درمانی ارائه نمی‌کند. اطلاعات ساختگی ذخیره می‌شوند و با «فراموشم کن» قابل حذف هستند.</footer>
   </div>
   <script>
     const input = document.getElementById("message");
@@ -134,10 +150,16 @@
     const send = document.getElementById("send");
     const defaultSendLabel = send.textContent;
     const reset = document.getElementById("reset");
+    const forget = document.getElementById("forget");
+    const returningNote = document.getElementById("returning-note");
+    const historyPanel = document.getElementById("history");
+    const visitHistory = document.getElementById("visit-history");
+    answerChoices.profile = answerChoices.confirm;
     const messages = document.getElementById("messages");
     const errorLine = document.getElementById("error");
     const statusLine = document.getElementById("status");
     const fieldLabels = {age: "سن", symptoms: "علائم", duration: "مدت علائم", severity: "شدت علائم", medications: "داروها", allergies: "حساسیت‌ها", confirm: "تأیید اطلاعات"};
+    fieldLabels.profile = "تأیید اطلاعات قبلی";
     const fields = {};
     for (const name of ["age", "symptoms", "duration", "severity", "medications", "allergies"]) {
       const row = document.createElement("div");
@@ -150,6 +172,12 @@
       document.getElementById("collected").append(row);
       fields[name] = value;
     }
+    let patientId = null;
+    let historyVersion = 0;
+    try {
+      patientId = localStorage.getItem("healthcare_patient_id") || null;
+      if (patientId && patientId.length > 64) rememberPatient(null);
+    } catch {}
     let current = null;
     let busy = false;
     let blocked = false;
@@ -161,6 +189,51 @@
       medicineItems.querySelectorAll("button").forEach(button => button.disabled = input.disabled);
       choice.disabled = input.disabled || choice.options.length <= 1;
       reset.disabled = busy;
+      forget.disabled = busy || !patientId;
+    }
+    function rememberPatient(id) {
+      patientId = id;
+      try {
+        if (id) localStorage.setItem("healthcare_patient_id", id);
+        else localStorage.removeItem("healthcare_patient_id");
+      } catch {}
+    }
+    async function loadHistory() {
+      const id = patientId;
+      const version = ++historyVersion;
+      if (!id) { visitHistory.replaceChildren(); return; }
+      try {
+        const visits = await request("/v1/patients/" + encodeURIComponent(id) + "/history?limit=10", undefined, "GET");
+        if (version !== historyVersion || id !== patientId) return;
+        visitHistory.replaceChildren();
+        const previous = visits.filter(visit => visit.session_id !== current?.session_id);
+        if (!previous.length) {
+          const empty = document.createElement("p");
+          empty.textContent = "هنوز مراجعهٔ قبلی ثبت نشده است.";
+          visitHistory.append(empty);
+        }
+        for (const visit of previous) {
+          const article = document.createElement("article");
+          article.className = "history-visit";
+          const date = document.createElement("p");
+          date.textContent = new Date(visit.created_at).toLocaleString("fa-IR") + (visit.done ? " — پایان‌یافته" : " — ناتمام");
+          const symptoms = document.createElement("p");
+          symptoms.textContent = visit.collected.symptoms || "علائمی ثبت نشده است.";
+          const chips = document.createElement("div");
+          chips.className = "history-chips";
+          for (const entry of [...visit.matched.symptoms, ...visit.matched.medicines]) {
+            const chip = document.createElement("span");
+            chip.className = "chip";
+            chip.textContent = entry.name_fa;
+            chips.append(chip);
+          }
+          article.append(date, symptoms, chips);
+          visitHistory.append(article);
+        }
+      } catch {
+        if (version !== historyVersion || id !== patientId) return;
+        visitHistory.textContent = "دریافت سابقه ممکن نشد. برای تلاش دوباره، این بخش را باز کنید.";
+      }
     }
     function renderMedicineList() {
       medicineItems.replaceChildren();
@@ -215,6 +288,7 @@
     }
     function render(state) {
       current = state;
+      returningNote.hidden = !state.returning;
       const medicineStep = state.step === "medications";
       medicineEditor.hidden = !medicineStep;
       addMedicineButton.hidden = !medicineStep;
@@ -259,7 +333,12 @@
         body: body ? JSON.stringify(body) : undefined,
         signal: AbortSignal.timeout(10000)
       });
-      if (!response.ok) throw new Error("درخواست ناموفق بود (کد " + response.status.toLocaleString("fa-IR") + "). برای ادامه «شروع دوباره» را بزنید.");
+      if (!response.ok) {
+        const error = new Error("درخواست ناموفق بود (کد " + response.status.toLocaleString("fa-IR") + "). برای ادامه «شروع دوباره» را بزنید.");
+        error.status = response.status;
+        throw error;
+      }
+      if (response.status === 204) return null;
       return response.json();
     }
     function fail(error) {
@@ -279,12 +358,21 @@
           const dictionary = await request("/v1/dictionaries/" + kind + "?limit=100", undefined, "GET");
           answerChoices[step] = [...(step === "medications" ? [noMedicine] : []), ...dictionary.entries.map(entry => entry.name_fa), customAnswer];
         }
-        const state = await request("/v1/chat/sessions");
+        let state;
+        try {
+          state = await request("/v1/chat/sessions", patientId ? {patient_id: patientId} : undefined);
+        } catch (error) {
+          if (!patientId || error.status !== 404) throw error;
+          rememberPatient(null);
+          state = await request("/v1/chat/sessions");
+        }
+        rememberPatient(state.patient_id);
         blocked = false;
         messages.replaceChildren();
         input.value = "";
         render(state);
         bubble(state.reply, "bot");
+        await loadHistory();
       } catch (error) { fail(error); }
       finally { busy = false; controls(); if (!input.disabled) input.focus(); }
     }
@@ -332,6 +420,35 @@
       }
     });
     reset.addEventListener("click", start);
+    historyPanel.addEventListener("toggle", () => { if (historyPanel.open) loadHistory(); });
+    forget.addEventListener("click", async () => {
+      if (busy || !patientId) return;
+      busy = true;
+      controls();
+      let deleted = false;
+      try {
+        try { await request("/v1/patients/" + encodeURIComponent(patientId), undefined, "DELETE"); }
+        catch (error) { if (error.status !== 404) throw error; }
+        rememberPatient(null);
+        current = null;
+        blocked = false;
+        historyVersion++;
+        draftMedicines = [];
+        renderMedicineList();
+        medicineEditor.hidden = true;
+        addMedicineButton.hidden = true;
+        returningNote.hidden = true;
+        messages.replaceChildren();
+        visitHistory.replaceChildren();
+        for (const node of Object.values(fields)) node.textContent = "هنوز پاسخ داده نشده";
+        document.querySelectorAll(".matches").forEach(node => node.replaceChildren());
+        input.value = "";
+        errorLine.textContent = "";
+        deleted = true;
+      } catch (error) { fail(error); }
+      finally { busy = false; controls(); }
+      if (deleted) await start();
+    });
     start();
   </script>
 </body>

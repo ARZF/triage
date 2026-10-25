@@ -1,3 +1,7 @@
+from unittest.mock import patch
+from pathlib import Path
+import tempfile
+import os
 import unittest
 
 from fastapi import Body, FastAPI, HTTPException
@@ -8,6 +12,10 @@ from app.schemas.common import ErrorResponse
 
 
 class ErrorTests(unittest.TestCase):
+    def setUp(self):
+        self.db_path = Path(self.enterContext(tempfile.TemporaryDirectory())) / "test.db"
+        self.enterContext(patch.dict(os.environ, {"APP_DB_PATH": str(self.db_path)}))
+
     def test_unknown_path(self):
         with TestClient(app) as client:
             response = client.get("/does-not-exist")
