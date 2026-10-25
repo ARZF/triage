@@ -1,0 +1,15 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "healthcare-agent"
+version = "0.1.0"
+description = "FastAPI backend for a healthcare agent."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = ["fastapi", "uvicorn"]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+py-modules = ["main"]
