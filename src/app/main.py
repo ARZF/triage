@@ -7,6 +7,8 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException
 
 from app.api.health import router
+from app.api.chat import router as chat_router
+from app.api.demo import router as demo_router
 from app.config import Settings
 from app.schemas.common import ErrorDetail, ErrorResponse
 
@@ -21,6 +23,8 @@ logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 app = FastAPI(title="Healthcare Agent")
 app.include_router(router)
+app.include_router(chat_router)
+app.include_router(demo_router)
 
 
 @app.exception_handler(HTTPException)

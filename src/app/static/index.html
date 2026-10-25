@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>نمایش گفت‌وگوی پذیرش بیمار · دستیار سلامت</title>
+  <style>
+    /* Hallmark — macrostructure: workspace — tone: quiet utility — anchor hue: forest */
+    :root {
+      --paper: #f5f5ef; --surface: #fff; --ink: #203b35; --muted: #576b64;
+      --line: #d5ddd5; --accent: #245d48; --tint: #eaf1e9; --danger: #9c2929;
+      --space-sm: 8px; --space-md: 16px; --space-lg: 24px; --space-xl: 32px;
+      --font-body: Tahoma, "Segoe UI", sans-serif; --font-display: var(--font-body);
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--paper); color: var(--ink); font-family: var(--font-body); line-height: 1.55; }
+    button, input, select { font: inherit; }
+    button { min-height: 44px; padding: 8px 20px; border: 1px solid var(--accent); border-radius: 6px; background: var(--accent); color: var(--surface); cursor: pointer; white-space: nowrap; }
+    button:hover:not(:disabled) { filter: brightness(.9); }
+    button:disabled { opacity: .5; cursor: default; }
+    :focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+    .banner { padding: 10px var(--space-md); text-align: center; background: var(--ink); color: var(--surface); font-weight: 650; }
+    .shell { max-width: 1120px; margin: auto; padding: var(--space-xl) var(--space-lg); }
+    header { display: flex; justify-content: space-between; align-items: center; gap: var(--space-md); margin-bottom: var(--space-lg); }
+    h1 { margin: 0; font: 500 clamp(28px, 5vw, 40px)/1.2 var(--font-display); }
+    header p { color: var(--muted); margin: var(--space-sm) 0 0; }
+    #reset { color: var(--ink); background: transparent; border-color: var(--line); }
+    main { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: var(--space-lg); align-items: start; }
+    .chat, aside { min-width: 0; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+    .chat-heading { display: flex; gap: var(--space-md); justify-content: space-between; border-bottom: 1px solid var(--line); padding: var(--space-md) var(--space-lg); }
+    #status { color: var(--muted); font-size: 14px; }
+    #messages { height: 420px; overflow-y: auto; padding: var(--space-lg); display: flex; flex-direction: column; gap: var(--space-md); }
+    .bubble { max-width: 90%; margin: 0; padding: 12px 16px; border-radius: 8px; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .bot { align-self: flex-start; background: var(--tint); }
+    .user { align-self: flex-end; color: var(--surface); background: var(--accent); }
+    form { padding: var(--space-md) var(--space-lg) var(--space-lg); border-top: 1px solid var(--line); }
+    label { display: block; font-size: 14px; font-weight: 650; margin-bottom: var(--space-sm); }
+    .compose { display: flex; gap: var(--space-sm); }
+    input, select { width: 100%; min-width: 0; min-height: 46px; border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; color: var(--ink); background: var(--surface); }
+    input:disabled, select:disabled { background: var(--paper); }
+    #answer-choice { margin-bottom: var(--space-sm); }
+    #choice-help { margin: 0 0 var(--space-md); color: var(--muted); font-size: 14px; }
+    #error { color: var(--danger); margin: var(--space-sm) 0 0; overflow-wrap: anywhere; }
+    #error:empty { display: none; }
+    aside { padding: var(--space-lg); }
+    h2 { font: 500 25px var(--font-display); margin: 0 0 var(--space-sm); }
+    aside p, footer { color: var(--muted); font-size: 14px; }
+    aside p { margin: 0 0 var(--space-md); }
+    dl { margin: 0; }
+    .field { border-top: 1px solid var(--line); padding: 12px 0; }
+    dt { font-size: 13px; color: var(--muted); }
+    dd { margin: 4px 0 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+    footer { margin-top: var(--space-md); }
+    @media (max-width: 720px) {
+      .shell { padding: var(--space-lg) var(--space-md); }
+      header { align-items: flex-start; }
+      main { grid-template-columns: minmax(0, 1fr); }
+      #messages { height: 340px; padding: var(--space-md); }
+      form, .chat-heading { padding: var(--space-md); }
+      #status { max-width: 50%; text-align: end; }
+      .bubble { max-width: 96%; }
+    }
+  </style>
+</head>
+<body>
+  <div class="banner">نسخهٔ نمایشی — فقط داده‌های ساختگی</div>
+  <div class="shell">
+    <header>
+      <div><h1>پذیرش بیمار</h1><p>گفت‌وگویی از پیش تعیین‌شده؛ فقط از اطلاعات ساختگی استفاده کنید.</p></div>
+      <button id="reset" type="button">شروع دوباره</button>
+    </header>
+    <main>
+      <section class="chat" aria-label="گفت‌وگوی پذیرش">
+        <div class="chat-heading"><strong>گفت‌وگو</strong><span id="status" role="status">در حال شروع...</span></div>
+        <div id="messages" role="log" aria-live="polite" aria-label="پیام‌های گفت‌وگو"></div>
+        <form id="chat-form">
+          <label for="answer-choice">انتخاب پاسخ</label>
+          <select id="answer-choice" disabled aria-describedby="choice-help"></select>
+          <p id="choice-help">از فهرست انتخاب کنید یا پاسخ را در کادر زیر بنویسید.</p>
+          <label for="message">پاسخ شما</label>
+          <div class="compose">
+            <input id="message" name="message" autocomplete="off" maxlength="2000" required disabled aria-describedby="error" placeholder="پاسخ ساختگی را بنویسید..." dir="auto">
+            <button id="send" type="submit" disabled>ارسال</button>
+          </div>
+          <p id="error" role="alert"></p>
+        </form>
+      </section>
+      <aside aria-labelledby="collected-title">
+        <h2 id="collected-title">اطلاعات ثبت‌شده</h2>
+        <p>پاسخ‌ها به‌تدریج اینجا نمایش داده می‌شوند. نام یا اطلاعات شناسایی وارد نکنید.</p>
+        <dl id="collected"></dl>
+      </aside>
+    </main>
+    <footer>این نسخه فقط نمایشی است و تشخیص یا توصیهٔ درمانی ارائه نمی‌کند. اطلاعات در حافظه نگه‌داری می‌شوند و با راه‌اندازی دوبارهٔ سرور از بین می‌روند.</footer>
+  </div>
+  <script>
+    const input = document.getElementById("message");
+    const choice = document.getElementById("answer-choice");
+    const choiceHelp = document.getElementById("choice-help");
+    const customAnswer = "پاسخ را خودم می‌نویسم";
+    const answerChoices = {
+      age: [...Array.from({length: 121}, (_, age) => age.toLocaleString("fa-IR")), customAnswer],
+      duration: ["کمتر از یک روز", "یک روز", "دو تا سه روز", "چهار تا هفت روز", "بیشتر از یک هفته", customAnswer],
+      severity: [...Array.from({length: 10}, (_, index) => (index + 1).toLocaleString("fa-IR")), customAnswer],
+      medications: ["هیچ", customAnswer],
+      allergies: ["ندارد", customAnswer],
+      confirm: ["بله", "خیر"]
+    };
+    const send = document.getElementById("send");
+    const reset = document.getElementById("reset");
+    const messages = document.getElementById("messages");
+    const errorLine = document.getElementById("error");
+    const statusLine = document.getElementById("status");
+    const fieldLabels = {age: "سن", symptoms: "علائم", duration: "مدت علائم", severity: "شدت علائم", medications: "داروها", allergies: "حساسیت‌ها", confirm: "تأیید اطلاعات"};
+    const fields = {};
+    for (const name of ["age", "symptoms", "duration", "severity", "medications", "allergies"]) {
+      const row = document.createElement("div");
+      row.className = "field";
+      const label = document.createElement("dt");
+      label.textContent = fieldLabels[name];
+      const value = document.createElement("dd");
+      value.textContent = "هنوز پاسخ داده نشده";
+      row.append(label, value);
+      document.getElementById("collected").append(row);
+      fields[name] = value;
+    }
+    let current = null;
+    let busy = false;
+    let blocked = false;
+    function controls() {
+      input.disabled = busy || blocked || !current || current.done;
+      send.disabled = input.disabled;
+      choice.disabled = input.disabled || choice.options.length <= 1;
+      reset.disabled = busy;
+    }
+    function bubble(text, role) {
+      const node = document.createElement("p");
+      node.className = "bubble " + role;
+      node.dir = "auto";
+      node.textContent = text;
+      messages.append(node);
+      messages.scrollTop = messages.scrollHeight;
+    }
+    function render(state) {
+      current = state;
+      const options = answerChoices[state.step] || [];
+      choice.replaceChildren();
+      for (const [index, text] of ["یک گزینه انتخاب کنید", ...options].entries()) {
+        const option = document.createElement("option");
+        option.textContent = text;
+        option.value = index === 0 || text === customAnswer ? "" : text;
+        choice.append(option);
+      }
+      choiceHelp.textContent = options.length
+        ? "از فهرست انتخاب کنید، سپس «ارسال» را بزنید. می‌توانید پاسخ را هم بنویسید."
+        : "برای شرح علائم، پاسخ را در کادر زیر بنویسید.";
+      input.setCustomValidity("");
+      for (const [name, node] of Object.entries(fields)) {
+        node.textContent = state.collected[name] === null ? "هنوز پاسخ داده نشده" : (typeof state.collected[name] === "number" ? state.collected[name].toLocaleString("fa-IR") : state.collected[name]);
+      }
+      statusLine.textContent = state.emergency ? "توقف اضطراری" : state.done ? "ثبت اطلاعات تکمیل شد" : "مرحلهٔ فعلی: " + fieldLabels[state.step];
+    }
+    async function request(path, body) {
+      const response = await fetch(path, {
+        method: "POST",
+        headers: body ? {"Content-Type": "application/json"} : {},
+        body: body ? JSON.stringify(body) : undefined,
+        signal: AbortSignal.timeout(10000)
+      });
+      if (!response.ok) throw new Error("درخواست ناموفق بود (کد " + response.status.toLocaleString("fa-IR") + "). برای ادامه «شروع دوباره» را بزنید.");
+      return response.json();
+    }
+    function fail(error) {
+      blocked = true;
+      errorLine.textContent = error.message.startsWith("درخواست ناموفق بود (کد ")
+        ? error.message : "درخواست ناموفق بود. اتصال را بررسی کنید و سپس «شروع دوباره» را بزنید.";
+      statusLine.textContent = "خطا در ارتباط";
+    }
+    async function start() {
+      if (busy) return;
+      busy = true;
+      controls();
+      errorLine.textContent = "";
+      try {
+        const state = await request("/v1/chat/sessions");
+        blocked = false;
+        messages.replaceChildren();
+        input.value = "";
+        render(state);
+        bubble(state.reply, "bot");
+      } catch (error) { fail(error); }
+      finally { busy = false; controls(); if (!input.disabled) input.focus(); }
+    }
+    document.getElementById("chat-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (input.disabled || !input.value.trim()) return;
+      const text = input.value;
+      busy = true;
+      controls();
+      errorLine.textContent = "";
+      try {
+        const state = await request("/v1/chat/sessions/" + current.session_id + "/messages", {message: text});
+        bubble(text, "user");
+        bubble(state.reply, "bot");
+        input.value = "";
+        render(state);
+      } catch (error) { fail(error); }
+      finally { busy = false; controls(); if (!input.disabled) input.focus(); }
+    });
+    input.addEventListener("invalid", () => input.setCustomValidity("لطفاً یک پاسخ ساختگی وارد کنید."));
+    input.addEventListener("input", () => input.setCustomValidity(""));
+    choice.addEventListener("change", () => {
+      input.value = choice.value;
+      input.setCustomValidity("");
+      input.focus();
+    });
+    reset.addEventListener("click", start);
+    start();
+  </script>
+</body>
+</html>
