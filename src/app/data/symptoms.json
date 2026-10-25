@@ -1,0 +1,119 @@
+{
+  "status": "starter list, not clinically reviewed",
+  "entries": [
+    {
+      "code": "cough",
+      "name_fa": "سرفه",
+      "name_en": "cough",
+      "aliases": [
+        "cough"
+      ]
+    },
+    {
+      "code": "fever",
+      "name_fa": "تب",
+      "name_en": "fever",
+      "aliases": [
+        "fever"
+      ]
+    },
+    {
+      "code": "headache",
+      "name_fa": "سردرد",
+      "name_en": "headache",
+      "aliases": [
+        "سر درد",
+        "سر‌درد",
+        "headache"
+      ]
+    },
+    {
+      "code": "sore_throat",
+      "name_fa": "گلودرد",
+      "name_en": "sore throat",
+      "aliases": [
+        "گلو درد",
+        "گلو‌درد",
+        "sore throat"
+      ]
+    },
+    {
+      "code": "runny_nose",
+      "name_fa": "آبریزش بینی",
+      "name_en": "runny nose",
+      "aliases": [
+        "آب ریزش بینی",
+        "آب‌ریزش بینی",
+        "runny nose"
+      ]
+    },
+    {
+      "code": "nausea",
+      "name_fa": "تهوع",
+      "name_en": "nausea",
+      "aliases": [
+        "حالت تهوع",
+        "nausea"
+      ]
+    },
+    {
+      "code": "diarrhea",
+      "name_fa": "اسهال",
+      "name_en": "diarrhea",
+      "aliases": [
+        "diarrhea",
+        "diarrhoea"
+      ]
+    },
+    {
+      "code": "abdominal_pain",
+      "name_fa": "درد شکم",
+      "name_en": "abdominal pain",
+      "aliases": [
+        "درد شکمی",
+        "abdominal pain"
+      ]
+    },
+    {
+      "code": "fatigue_weakness",
+      "name_fa": "خستگی و ضعف",
+      "name_en": "fatigue/weakness",
+      "aliases": [
+        "خستگی",
+        "ضعف",
+        "fatigue",
+        "weakness"
+      ]
+    },
+    {
+      "code": "dizziness",
+      "name_fa": "سرگیجه",
+      "name_en": "dizziness",
+      "aliases": [
+        "سر گیجه",
+        "سر‌گیجه",
+        "dizziness"
+      ]
+    },
+    {
+      "code": "muscle_pain",
+      "name_fa": "درد عضلانی",
+      "name_en": "muscle pain",
+      "aliases": [
+        "درد ماهیچه",
+        "درد ماهیچه‌ای",
+        "درد ماهیچه ای",
+        "muscle pain"
+      ]
+    },
+    {
+      "code": "skin_rash",
+      "name_fa": "بثورات پوستی",
+      "name_en": "skin rash",
+      "aliases": [
+        "راش پوستی",
+        "skin rash"
+      ]
+    }
+  ]
+}

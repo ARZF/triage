@@ -1,6 +1,6 @@
 # Healthcare Agent: Implementation Plan and Specification
 
-Status: Slice 1a approved. Scripted intake and demo are in scope; future workflow decisions remain proposals.
+Status: Slices 1a and 2a approved. Scripted intake, Persian demo, and JSON vocabulary matching are in scope; future workflow decisions remain proposals.
 
 ## 1. Purpose
 
@@ -22,7 +22,7 @@ at a time, with an explicit API contract and a runnable check for its behavior.
 - Put application code in `src/`, runnable checks in `tests/`, and specifications
   and project documentation in `docs/`.
 - Do not create additional folders without the user's permission.
-- The user approved `src/app/`, `src/app/api/`, `src/app/schemas/`, `src/app/agent/`, and `src/app/static/`.
+- The user approved `src/app/`, `src/app/api/`, `src/app/schemas/`, `src/app/agent/`, `src/app/static/`, and `src/app/data/`.
 - `models/` and `services/` are proposed only for when needed; creating them requires permission.
 - Reuse existing code, standard library features, and installed dependencies first.
 - Add no speculative abstractions, integrations, or infrastructure.
@@ -101,15 +101,60 @@ Complete this section for each agreed feature before writing its code:
 
 - **Status:** approved.
 - **User outcome:** select common answers instead of typing every reply.
-- **Scope:** native labeled select above the existing reply box, with Persian choices and RTL layout. Ages 0-120, severity 1-10, common duration choices, no-medication/no-allergy responses, and yes/no confirmation. Symptoms remain free text; every step permits custom text.
+- **Scope:** native labeled select above the existing reply box, with Persian choices and RTL layout. Ages 0-120, severity 1-10, common duration choices, no-medication/no-allergy responses, and yes/no confirmation. Symptoms come from the JSON dictionary; every step permits custom text.
 - **API contract:** submit the selected value through the existing message endpoint; no API or state-machine changes.
 - **Validation:** retain server validation. No selection is prefilled or automatically submitted; choose, review, then Send. Numeric option labels and values use Persian digits.
 - **Agent behavior:** keep the same step order, red-flag stop, reset, and terminal behavior.
-- **Failure behavior:** disable dropdown and input together while pending, failed, or complete. Disable the dropdown for symptoms, with a visible instruction to type the description.
+- **Failure behavior:** disable dropdown and input together while pending, failed, or complete. Load the symptom choices from the dictionary endpoint before creating a new session.
 - **Access and data handling:** same synthetic-only session behavior; no new collection fields.
 - **Configuration:** no new folders or dependencies.
 - **Acceptance examples:** select age 30, type synthetic symptoms, select a duration, severity 3, no medications, no allergies, and yes to complete; a custom choice clears the input for typing; no at confirm restarts at age.
 - **Runnable check:** existing unittest suite, including a full API intake using the exact dropdown answer values.
+
+
+### Feature: Slice 2a - JSON symptom and medicine vocabulary
+
+- **Status:** approved.
+- **User outcome:** see vocabulary matches for synthetic symptoms and medications in chat responses and Persian demo chips.
+- **Scope:** two JSON dictionaries in the approved src/app/data/ folder, each containing 12 starter vocabulary entries. No database, LLM, brands, doses, indications, side effects, interactions, external codes, diagnosis, or treatment advice.
+- **API contract:** GET /v1/dictionaries/{kind}?q=&limit= accepts symptoms or medicines, optional q of at most 100 characters, and limit 1-100 (default 50). It returns {kind, entries: [{code, name_fa, name_en, aliases}]}; invalid kind/query/limit returns 422 ErrorResponse. ChatResponse adds matched: {symptoms: [{code, name_fa}], medicines: [{code, name_fa}]}, computed from collected.symptoms and collected.medications on each response. Existing fields and routes keep their contracts.
+- **Validation:** JSON document status is 'starter list, not clinically reviewed'. Require unique lowercase slug codes matching ^[a-z0-9_]+$, non-empty Persian and English names, and a list of non-empty alias strings. Bad JSON, unreadable files, malformed documents, and invalid entries raise ValueError naming only the file, code when available, and a safe reason; never dump contents.
+- **Agent behavior:** intake.py remains pure and unchanged. Both dictionaries load once during startup, using a standard-library cache. Normalize text and aliases with casefold, the existing TEXT_NORMALIZATION, Persian/Arabic-Indic digits to ASCII, Unicode punctuation to spaces, and collapsed whitespace. name_fa is always an implicit alias; English names are searchable as well. Matching searches padded whole words/phrases, returns each code once, and orders matches by first text position. Dictionary q search uses normalized substrings across names and aliases, retaining file order.
+- **Failure behavior:** invalid files stop startup with sanitized ValueError; no partial dictionary load is used. No write endpoint. A non-empty unmatched answer produces no extra chips or 'not found' message.
+- **Access and data handling:** synthetic-only session rules continue. Vocabulary recognition is not clinical interpretation. Do not log answers or collected data.
+- **Configuration:** JSON files are the source of truth. Edit them locally and restart the server to reload. Include data/*.json as package data; add no dependencies.
+- **Acceptance examples:** symptoms 'سرفه و تب خفیف' matches cough then fever; 'تبریز' does not match fever; Arabic letter variants, half-spaces, punctuation, digits, English aliases, and repeated mentions behave consistently. A full intake with matching symptoms and 'هیچ' medications produces symptom chips and no medicine chips.
+- **Runnable check:** tests/test_dictionaries.py covers file validation, normalization, matching, API search/bounds, and a full matched intake; all existing 23 tests must still pass. Reinstall the editable dev package, run unittest discovery, start Uvicorn, and complete an intake in /demo to check chips.
+
+
+### Feature: Dictionary-backed default symptom choices
+
+- **Status:** approved.
+- **User outcome:** choose a starter symptom from the dropdown instead of having to type it.
+- **Scope:** populate symptoms from the existing JSON-backed endpoint; keep the custom answer option and editable reply box. Add no vocabulary, folders, or dependencies.
+- **API contract:** reuse GET /v1/dictionaries/symptoms?limit=100 and the existing message POST; no backend contracts change.
+- **Validation:** preserve message validation and symptom matching. Selecting an option fills the input without auto-submitting.
+- **Agent behavior:** intake steps and red-flag handling remain unchanged.
+- **Failure behavior:** reload symptom choices before creating each new session; dictionary failures use the existing visible error and Reset recovery. Controls remain disabled during loading.
+- **Access and data handling:** synthetic-only demo rules continue; dictionary labels use textContent.
+- **Configuration:** JSON remains the source of truth. At most 100 choices are loaded; a larger vocabulary will need searchable choices.
+- **Acceptance examples:** on the symptom step, the dropdown contains all 12 Persian names plus placeholder/custom entry; choosing cough fills the reply and produces its chip after Send. Reset reloads the options.
+- **Runnable check:** unittest discovery includes every default symptom name as a valid matching answer; automated browser verification checks actual options, selection, custom entry, and loading failure.
+
+
+### Feature: Default medicine choices and editable multi-medicine answer
+
+- **Status:** approved.
+- **User outcome:** choose several existing medicines or add custom names before submitting the intake answer.
+- **Scope:** load the 12 starter generic names from the existing medicine dictionary. At the medication step, selecting a name appends it to an editable list. Provide Add for custom text, remove controls, none, and Submit list. No brands, doses, clinical advice, folders, or dependencies are added.
+- **API contract:** reuse dictionary GET and chat message POST. Submit the completed list as Persian-comma-separated text in the existing message field; collected.medications remains a string and matched.medicines remains the recognized vocabulary list.
+- **Validation:** deduplicate identical names case-insensitively; none clears all medicine entries and adding a medicine removes none. Enforce the existing 2000-character message ceiling before changing the list or sending. Preserve a pending typed name on final submit.
+- **Agent behavior:** all intake steps, matching, final-state behavior, and red-flag handling remain unchanged.
+- **Failure behavior:** use existing request error and Reset recovery. Disable editor controls while pending, failed, or complete. Reset and successful step advancement clear the local draft list.
+- **Access and data handling:** draft names exist only in page memory until submitted; same synthetic-only rules and textContent rendering apply.
+- **Configuration:** load symptoms and medicines before session creation, at most 100 entries per dictionary. JSON remains the source of truth.
+- **Acceptance examples:** select two names and add a custom name, remove one, then submit the remaining names together; repeated selection adds no duplicate; none is exclusive; Reset clears drafts; valid known names produce separate matched chips.
+- **Runnable check:** unittest discovery covers all generic default medicine names and a multi-name intake; automated browser checks verify adding, removing, duplicates, none, length validation, keyboard entry, pending input, and mobile layout.
 
 ## 6. Coding and verification rules
 
@@ -238,3 +283,48 @@ HTML-like synthetic input, and no horizontal overflow at widths 320, 375, 414,
 and 768 pixels. A temporary browser profile was removed after testing; no
 folders or dependencies were added to the repository. This was an automated
 browser check, not a manual visual inspection. No commits or pushes were made.
+
+## 11. Slice 2a implementation checklist
+
+- [x] Record the approved specification before implementing code.
+- [x] Approve only src/app/data/ and add the two 12-entry JSON vocabulary files.
+- [x] Add sanitized validation, cached startup loading, shared normalization, whole-phrase matching, and substring search.
+- [x] Add the read-only dictionary API, typed responses, computed chat matches, and Persian side-panel chips.
+- [x] Keep intake.py unchanged and preserve the existing 23 tests.
+- [x] Add dictionary checks; all 39 unittest tests pass.
+- [x] Update README, changelog, and package-data configuration.
+- [x] Reinstall the editable dev package and verify JSON packaging.
+- [x] Restart Uvicorn and complete a synthetic intake in /demo to verify chips (automated browser).
+- [x] Record final checks and the manual visual-inspection limitation; stop after this slice.
+
+### Slice 2a verification (2026-10-25)
+
+- Editable dev installation succeeded using the previously approved process-only proxy bypass.
+- All 39 unittest tests passed, including the original 23; Starlette's existing httpx deprecation warning remains.
+- Setuptools SOURCES.txt includes data/symptoms.json and data/medicines.json.
+- Uvicorn started successfully with cached dictionary validation during lifespan startup.
+- An automated headless Chrome intake showed cough/fever chips for the Persian symptom answer and no medicine chips for the none answer.
+- A generic medicine alias displayed its Persian chip; unmatched symptoms showed no chips, and Reset cleared previous chips.
+- Existing dropdown, terminal/error-state, inert text rendering, and widths 320/375/414/768 checks passed in the browser.
+- intake.py is unchanged. No new dependencies, commits, or pushes were made.
+- The browser check was automated; no manual visual inspection was performed.
+
+### Default symptom dropdown verification (2026-10-25)
+
+All 40 unittest tests passed. The automated browser check confirmed all 12
+JSON-backed Persian symptom names in the dropdown, selected-answer submission
+and its resulting chip, custom entry, Reset, dictionary-loading failure
+handling, a complete intake, and mobile widths 320/375/414/768. No folders,
+dependencies, commits, or pushes were added.
+
+### Multi-medicine editor verification (2026-10-25)
+
+All 42 unittest tests passed, including every default medicine name and a
+multi-medicine answer with preserved custom text. The automated Chrome check
+verified the 12 JSON-backed names, multi-add/remove, case-insensitive duplicate
+prevention, custom Add/Enter input, exclusive none, 2000-character total limit,
+Reset cleanup, pending-control locks, retention of unfinished input across
+choice changes, final submission, and separate matched medicine chips.
+Mobile widths 320/375/414/768 and the earlier symptom/chip flows passed.
+No API fields, intake behavior, folders, or dependencies were changed.
+No commits or pushes were made. No manual visual inspection was performed.

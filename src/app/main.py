@@ -1,4 +1,5 @@
 import logging
+from contextlib import asynccontextmanager
 from http.client import responses
 
 from fastapi import FastAPI, Request
@@ -9,6 +10,8 @@ from starlette.exceptions import HTTPException
 from app.api.health import router
 from app.api.chat import router as chat_router
 from app.api.demo import router as demo_router
+from app.api.dictionaries import router as dictionary_router
+from app.agent.dictionaries import load_dictionaries
 from app.config import Settings
 from app.schemas.common import ErrorDetail, ErrorResponse
 
@@ -21,10 +24,17 @@ logging.basicConfig(
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
 
-app = FastAPI(title="Healthcare Agent")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    load_dictionaries()
+    yield
+
+
+app = FastAPI(title="Healthcare Agent", lifespan=lifespan)
 app.include_router(router)
 app.include_router(chat_router)
 app.include_router(demo_router)
+app.include_router(dictionary_router)
 
 
 @app.exception_handler(HTTPException)

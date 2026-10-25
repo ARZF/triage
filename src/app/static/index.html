@@ -39,6 +39,15 @@
     input, select { width: 100%; min-width: 0; min-height: 46px; border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; color: var(--ink); background: var(--surface); }
     input:disabled, select:disabled { background: var(--paper); }
     #answer-choice { margin-bottom: var(--space-sm); }
+    .medicines-step .compose { flex-wrap: wrap; }
+    .medicines-step .compose input { flex-basis: 100%; }
+    .medicines-step .compose button { flex: 1; }
+    #medicine-editor { margin-bottom: var(--space-md); }
+    #medicine-heading { margin: 0 0 var(--space-sm); font-size: 14px; font-weight: 650; }
+    #medicine-list { list-style: none; padding: 0; margin: 0; display: grid; gap: var(--space-sm); }
+    #medicine-list li { display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm); border: 1px solid var(--line); border-radius: 6px; padding: var(--space-sm); }
+    #medicine-list span { overflow-wrap: anywhere; min-width: 0; }
+    #medicine-list button { background: transparent; color: var(--ink); border-color: var(--line); padding: 4px 12px; }
     #choice-help { margin: 0 0 var(--space-md); color: var(--muted); font-size: 14px; }
     #error { color: var(--danger); margin: var(--space-sm) 0 0; overflow-wrap: anywhere; }
     #error:empty { display: none; }
@@ -50,6 +59,10 @@
     .field { border-top: 1px solid var(--line); padding: 12px 0; }
     dt { font-size: 13px; color: var(--muted); }
     dd { margin: 4px 0 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+    .matches { display: flex; gap: var(--space-sm); flex-wrap: wrap; }
+    .matches:empty { display: none; }
+    .chip { background: var(--tint); border: 1px solid var(--line); border-radius: 16px; padding: 4px 12px; font-size: 14px; overflow-wrap: anywhere; }
+    .vocabulary-note { margin-top: var(--space-md); }
     footer { margin-top: var(--space-md); }
     @media (max-width: 720px) {
       .shell { padding: var(--space-lg) var(--space-md); }
@@ -78,8 +91,13 @@
           <select id="answer-choice" disabled aria-describedby="choice-help"></select>
           <p id="choice-help">از فهرست انتخاب کنید یا پاسخ را در کادر زیر بنویسید.</p>
           <label for="message">پاسخ شما</label>
+          <div id="medicine-editor" hidden role="group" aria-labelledby="medicine-heading">
+            <p id="medicine-heading">فهرست داروهای واردشده</p>
+            <ul id="medicine-list" aria-live="polite"></ul>
+          </div>
           <div class="compose">
             <input id="message" name="message" autocomplete="off" maxlength="2000" required disabled aria-describedby="error" placeholder="پاسخ ساختگی را بنویسید..." dir="auto">
+            <button id="add-medicine" type="button" hidden disabled>افزودن</button>
             <button id="send" type="submit" disabled>ارسال</button>
           </div>
           <p id="error" role="alert"></p>
@@ -89,6 +107,9 @@
         <h2 id="collected-title">اطلاعات ثبت‌شده</h2>
         <p>پاسخ‌ها به‌تدریج اینجا نمایش داده می‌شوند. نام یا اطلاعات شناسایی وارد نکنید.</p>
         <dl id="collected"></dl>
+        <div id="matched-symptoms" class="matches" role="list" aria-label="واژه‌های علائم شناسایی‌شده" aria-live="polite"></div>
+        <div id="matched-medicines" class="matches" role="list" aria-label="نام داروهای شناسایی‌شده" aria-live="polite"></div>
+        <p class="vocabulary-note">فهرست واژگان اولیه است و از نظر بالینی بررسی نشده است.</p>
       </aside>
     </main>
     <footer>این نسخه فقط نمایشی است و تشخیص یا توصیهٔ درمانی ارائه نمی‌کند. اطلاعات در حافظه نگه‌داری می‌شوند و با راه‌اندازی دوبارهٔ سرور از بین می‌روند.</footer>
@@ -97,6 +118,10 @@
     const input = document.getElementById("message");
     const choice = document.getElementById("answer-choice");
     const choiceHelp = document.getElementById("choice-help");
+    const medicineEditor = document.getElementById("medicine-editor");
+    const medicineItems = document.getElementById("medicine-list");
+    const addMedicineButton = document.getElementById("add-medicine");
+    const noMedicine = "هیچ";
     const customAnswer = "پاسخ را خودم می‌نویسم";
     const answerChoices = {
       age: [...Array.from({length: 121}, (_, age) => age.toLocaleString("fa-IR")), customAnswer],
@@ -107,6 +132,7 @@
       confirm: ["بله", "خیر"]
     };
     const send = document.getElementById("send");
+    const defaultSendLabel = send.textContent;
     const reset = document.getElementById("reset");
     const messages = document.getElementById("messages");
     const errorLine = document.getElementById("error");
@@ -127,11 +153,57 @@
     let current = null;
     let busy = false;
     let blocked = false;
+    let draftMedicines = [];
     function controls() {
       input.disabled = busy || blocked || !current || current.done;
-      send.disabled = input.disabled;
+      send.disabled = input.disabled || (current?.step === "medications" && !draftMedicines.length && !input.value.trim());
+      addMedicineButton.disabled = input.disabled || !input.value.trim();
+      medicineItems.querySelectorAll("button").forEach(button => button.disabled = input.disabled);
       choice.disabled = input.disabled || choice.options.length <= 1;
       reset.disabled = busy;
+    }
+    function renderMedicineList() {
+      medicineItems.replaceChildren();
+      draftMedicines.forEach((name, index) => {
+        const item = document.createElement("li");
+        const text = document.createElement("span");
+        text.dir = "auto";
+        text.textContent = name;
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.textContent = "حذف";
+        remove.setAttribute("aria-label", "حذف " + name);
+        remove.addEventListener("click", () => {
+          draftMedicines.splice(index, 1);
+          errorLine.textContent = "";
+          renderMedicineList();
+          controls();
+          input.focus();
+        });
+        item.append(text, remove);
+        medicineItems.append(item);
+      });
+    }
+    function addMedicine() {
+      const name = input.value.trim();
+      if (input.disabled || !name) return false;
+      const none = [noMedicine, "ندارد", "none", "no"].includes(name.toLowerCase());
+      const next = none ? [noMedicine] : draftMedicines.filter(value => value !== noMedicine);
+      if (!none && !next.some(value => value.toLowerCase() === name.toLowerCase())) next.push(name);
+      if (next.join("، ").length > input.maxLength) {
+        errorLine.textContent = "طول فهرست داروها نباید بیشتر از ۲۰۰۰ نویسه باشد. نام‌ها را کوتاه‌تر کنید.";
+        input.focus();
+        return false;
+      }
+      draftMedicines = next;
+      input.value = "";
+      input.setCustomValidity("");
+      choice.value = "";
+      errorLine.textContent = "";
+      renderMedicineList();
+      controls();
+      input.focus();
+      return true;
     }
     function bubble(text, role) {
       const node = document.createElement("p");
@@ -143,6 +215,25 @@
     }
     function render(state) {
       current = state;
+      const medicineStep = state.step === "medications";
+      medicineEditor.hidden = !medicineStep;
+      addMedicineButton.hidden = !medicineStep;
+      input.required = !medicineStep;
+      document.getElementById("chat-form").classList.toggle("medicines-step", medicineStep);
+      send.textContent = medicineStep ? "ثبت فهرست" : defaultSendLabel;
+      if (!medicineStep) draftMedicines = [];
+      renderMedicineList();
+      for (const kind of ["symptoms", "medicines"]) {
+        const chips = document.getElementById("matched-" + kind);
+        chips.replaceChildren();
+        for (const entry of state.matched[kind]) {
+          const chip = document.createElement("span");
+          chip.className = "chip";
+          chip.setAttribute("role", "listitem");
+          chip.textContent = entry.name_fa;
+          chips.append(chip);
+        }
+      }
       const options = answerChoices[state.step] || [];
       choice.replaceChildren();
       for (const [index, text] of ["یک گزینه انتخاب کنید", ...options].entries()) {
@@ -154,15 +245,16 @@
       choiceHelp.textContent = options.length
         ? "از فهرست انتخاب کنید، سپس «ارسال» را بزنید. می‌توانید پاسخ را هم بنویسید."
         : "برای شرح علائم، پاسخ را در کادر زیر بنویسید.";
+      if (medicineStep) choiceHelp.textContent = "داروها را یکی‌یکی از فهرست انتخاب کنید؛ برای نام دلخواه «افزودن» یا Enter را بزنید. سپس «ثبت فهرست» را بزنید.";
       input.setCustomValidity("");
       for (const [name, node] of Object.entries(fields)) {
         node.textContent = state.collected[name] === null ? "هنوز پاسخ داده نشده" : (typeof state.collected[name] === "number" ? state.collected[name].toLocaleString("fa-IR") : state.collected[name]);
       }
       statusLine.textContent = state.emergency ? "توقف اضطراری" : state.done ? "ثبت اطلاعات تکمیل شد" : "مرحلهٔ فعلی: " + fieldLabels[state.step];
     }
-    async function request(path, body) {
+    async function request(path, body, method = "POST") {
       const response = await fetch(path, {
-        method: "POST",
+        method,
         headers: body ? {"Content-Type": "application/json"} : {},
         body: body ? JSON.stringify(body) : undefined,
         signal: AbortSignal.timeout(10000)
@@ -182,6 +274,11 @@
       controls();
       errorLine.textContent = "";
       try {
+        // ponytail: each dropdown is capped at 100 entries; add search when vocabulary grows beyond this.
+        for (const [kind, step] of [["symptoms", "symptoms"], ["medicines", "medications"]]) {
+          const dictionary = await request("/v1/dictionaries/" + kind + "?limit=100", undefined, "GET");
+          answerChoices[step] = [...(step === "medications" ? [noMedicine] : []), ...dictionary.entries.map(entry => entry.name_fa), customAnswer];
+        }
         const state = await request("/v1/chat/sessions");
         blocked = false;
         messages.replaceChildren();
@@ -193,8 +290,11 @@
     }
     document.getElementById("chat-form").addEventListener("submit", async (event) => {
       event.preventDefault();
-      if (input.disabled || !input.value.trim()) return;
-      const text = input.value;
+      if (input.disabled) return;
+      const medicineStep = current.step === "medications";
+      if (medicineStep && input.value.trim() && !addMedicine()) return;
+      const text = medicineStep ? draftMedicines.join("، ") : input.value;
+      if (!text.trim()) return;
       busy = true;
       controls();
       errorLine.textContent = "";
@@ -208,11 +308,28 @@
       finally { busy = false; controls(); if (!input.disabled) input.focus(); }
     });
     input.addEventListener("invalid", () => input.setCustomValidity("لطفاً یک پاسخ ساختگی وارد کنید."));
-    input.addEventListener("input", () => input.setCustomValidity(""));
+    input.addEventListener("input", () => { input.setCustomValidity(""); controls(); });
+    input.addEventListener("keydown", event => {
+      if (event.key === "Enter" && !event.isComposing && current?.step === "medications") {
+        event.preventDefault();
+        if (input.value.trim()) addMedicine();
+        else if (draftMedicines.length) document.getElementById("chat-form").requestSubmit();
+      }
+    });
+    addMedicineButton.addEventListener("click", addMedicine);
     choice.addEventListener("change", () => {
-      input.value = choice.value;
+      const selected = choice.value;
       input.setCustomValidity("");
-      input.focus();
+      if (current?.step === "medications") {
+        if (!selected) { input.focus(); return; }
+        if (selected !== noMedicine && input.value.trim() && !addMedicine()) return;
+        input.value = selected;
+        if (addMedicine()) choice.focus();
+      } else {
+        input.value = selected;
+        controls();
+        input.focus();
+      }
     });
     reset.addEventListener("click", start);
     start();

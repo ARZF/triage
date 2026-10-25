@@ -1,0 +1,111 @@
+{
+  "status": "starter list, not clinically reviewed",
+  "entries": [
+    {
+      "code": "acetaminophen",
+      "name_fa": "استامینوفن",
+      "name_en": "acetaminophen",
+      "aliases": [
+        "پاراستامول",
+        "acetaminophen",
+        "paracetamol"
+      ]
+    },
+    {
+      "code": "ibuprofen",
+      "name_fa": "ایبوپروفن",
+      "name_en": "ibuprofen",
+      "aliases": [
+        "ایبوپروفین",
+        "ibuprofen"
+      ]
+    },
+    {
+      "code": "aspirin",
+      "name_fa": "آسپرین",
+      "name_en": "aspirin",
+      "aliases": [
+        "آسپیرین",
+        "aspirin"
+      ]
+    },
+    {
+      "code": "amoxicillin",
+      "name_fa": "آموکسی سیلین",
+      "name_en": "amoxicillin",
+      "aliases": [
+        "آموکسی‌سیلین",
+        "آموکسیسیلین",
+        "amoxicillin"
+      ]
+    },
+    {
+      "code": "cetirizine",
+      "name_fa": "ستیریزین",
+      "name_en": "cetirizine",
+      "aliases": [
+        "سیتریزین",
+        "cetirizine"
+      ]
+    },
+    {
+      "code": "loratadine",
+      "name_fa": "لوراتادین",
+      "name_en": "loratadine",
+      "aliases": [
+        "loratadine"
+      ]
+    },
+    {
+      "code": "omeprazole",
+      "name_fa": "امپرازول",
+      "name_en": "omeprazole",
+      "aliases": [
+        "اومپرازول",
+        "omeprazole"
+      ]
+    },
+    {
+      "code": "metformin",
+      "name_fa": "متفورمین",
+      "name_en": "metformin",
+      "aliases": [
+        "metformin"
+      ]
+    },
+    {
+      "code": "atorvastatin",
+      "name_fa": "آتورواستاتین",
+      "name_en": "atorvastatin",
+      "aliases": [
+        "اتورواستاتین",
+        "atorvastatin"
+      ]
+    },
+    {
+      "code": "losartan",
+      "name_fa": "لوزارتان",
+      "name_en": "losartan",
+      "aliases": [
+        "لوسارتان",
+        "losartan"
+      ]
+    },
+    {
+      "code": "salbutamol",
+      "name_fa": "سالبوتامول",
+      "name_en": "salbutamol",
+      "aliases": [
+        "salbutamol"
+      ]
+    },
+    {
+      "code": "dextromethorphan",
+      "name_fa": "دکسترومتورفان",
+      "name_en": "dextromethorphan",
+      "aliases": [
+        "dextromethorphan"
+      ]
+    }
+  ]
+}

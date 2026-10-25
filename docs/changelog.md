@@ -7,6 +7,14 @@ move them into a dated version section when a release is made.
 
 ### Added
 
+- JSON-backed default medicine choices and an editable multi-medicine list with custom names, removal, duplicate prevention, exclusive none, and message-length validation.
+
+- Connected the symptom dropdown to the JSON-backed dictionary endpoint, showing the starter symptom names while preserving custom entry.
+
+- Slice 2a: validated starter JSON symptom/medicine dictionaries, cached startup loading, shared normalization, whole-phrase matching, and a read-only search endpoint.
+- Response-time matched vocabulary in chat responses and Persian plain-text chips in the demo.
+- Dictionary validation, matching, cache, query/limit, and intake regression tests; approved data/ folder and packaged JSON files.
+
 - Persian dropdown answers for age, duration, severity, medications, allergies, and confirmation, with custom text still available.
 
 - Slice 1a scripted synthetic intake, immutable state machine, fixed red-flag stop, and bounded sessions.
