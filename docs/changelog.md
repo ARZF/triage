@@ -7,6 +7,11 @@ move them into a dated version section when a release is made.
 
 ### Added
 
+- Slice 3: optional OpenAI-compatible specialty triage, bounded structured context, validated provider JSON, persistent fallback and idempotent results.
+- Synthetic doctor directory with startup validation, specialty filtering, online/score ordering, and Persian demo cards with loading and retry.
+- LLM environment settings with secret-safe repr and outcome-only logging; network-free config/client/context/triage checks.
+
+
 - Slice 2b: SQLite patients, sessions, redacted message logs, stored vocabulary codes, UTC timestamps, schema initialization, indexes, and cascade deletion.
 - Returning-patient profile confirmation, public patient ids, stored-code visit history, and forget-me endpoints.
 - Guarded demo patient-id storage, Persian welcome-back, collapsible history, and forget-me behavior.
@@ -39,6 +44,10 @@ move them into a dated version section when a release is made.
 - This changelog in `docs/changelog.md`.
 
 ### Changed
+
+- Promoted existing httpx to a runtime dependency, removed the dev extra, and updated installation commands.
+- Bumped SQLite schema version to 2 with cascading triage_results; patient deletion also removes triage data.
+
 
 - Moved settings, SQLite infrastructure, exception handlers, and logging setup into the approved core package; updated imports without changing runtime contracts.
 

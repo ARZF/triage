@@ -1,0 +1,184 @@
+{
+  "status": "synthetic demo data, not real doctors",
+  "specialties": [
+    {
+      "code": "general_practice",
+      "name_fa": "پزشکی عمومی",
+      "name_en": "general practice"
+    },
+    {
+      "code": "internal_medicine",
+      "name_fa": "بیماری‌های داخلی",
+      "name_en": "internal medicine"
+    },
+    {
+      "code": "pediatrics",
+      "name_fa": "کودکان",
+      "name_en": "pediatrics"
+    },
+    {
+      "code": "ent",
+      "name_fa": "گوش و حلق و بینی",
+      "name_en": "ear, nose and throat"
+    },
+    {
+      "code": "dermatology",
+      "name_fa": "پوست",
+      "name_en": "dermatology"
+    },
+    {
+      "code": "gastroenterology",
+      "name_fa": "گوارش",
+      "name_en": "gastroenterology"
+    },
+    {
+      "code": "neurology",
+      "name_fa": "مغز و اعصاب",
+      "name_en": "neurology"
+    },
+    {
+      "code": "cardiology",
+      "name_fa": "قلب",
+      "name_en": "cardiology"
+    },
+    {
+      "code": "pulmonology",
+      "name_fa": "ریه",
+      "name_en": "pulmonology"
+    }
+  ],
+  "doctors": [
+    {
+      "id": "demo_doctor_1",
+      "name_fa": "پزشک فرضی ۱",
+      "specialty_code": "general_practice",
+      "expertise": [
+        "مرور اطلاعات اولیه",
+        "گفت‌وگوی پزشکی عمومی"
+      ],
+      "score": 4.9,
+      "online": false
+    },
+    {
+      "id": "demo_doctor_2",
+      "name_fa": "پزشک فرضی ۲",
+      "specialty_code": "general_practice",
+      "expertise": [
+        "مرور اطلاعات اولیه",
+        "گفت‌وگوی پزشکی عمومی"
+      ],
+      "score": 4.2,
+      "online": true
+    },
+    {
+      "id": "demo_doctor_3",
+      "name_fa": "پزشک فرضی ۳",
+      "specialty_code": "internal_medicine",
+      "expertise": [
+        "مرور اطلاعات اولیه",
+        "گفت‌وگوی بیماری‌های داخلی"
+      ],
+      "score": 4.6,
+      "online": true
+    },
+    {
+      "id": "demo_doctor_4",
+      "name_fa": "پزشک فرضی ۴",
+      "specialty_code": "internal_medicine",
+      "expertise": [
+        "مرور اطلاعات اولیه",
+        "گفت‌وگوی بیماری‌های داخلی"
+      ],
+      "score": 4.8,
+      "online": false
+    },
+    {
+      "id": "demo_doctor_5",
+      "name_fa": "پزشک فرضی ۵",
+      "specialty_code": "pediatrics",
+      "expertise": [
+        "مرور اطلاعات اولیه",
+        "گفت‌وگوی کودکان"
+      ],
+      "score": 4.5,
+      "online": true
+    },
+    {
+      "id": "demo_doctor_6",
+      "name_fa": "پزشک فرضی ۶",
+      "specialty_code": "ent",
+      "expertise": [
+        "مرور اطلاعات اولیه",
+        "گفت‌وگوی گوش و حلق و بینی"
+      ],
+      "score": 3.8,
+      "online": true
+    },
+    {
+      "id": "demo_doctor_7",
+      "name_fa": "پزشک فرضی ۷",
+      "specialty_code": "ent",
+      "expertise": [
+        "مرور اطلاعات اولیه",
+        "گفت‌وگوی گوش و حلق و بینی"
+      ],
+      "score": 4.7,
+      "online": false
+    },
+    {
+      "id": "demo_doctor_8",
+      "name_fa": "پزشک فرضی ۸",
+      "specialty_code": "dermatology",
+      "expertise": [
+        "مرور اطلاعات اولیه",
+        "گفت‌وگوی پوست"
+      ],
+      "score": 4.4,
+      "online": true
+    },
+    {
+      "id": "demo_doctor_9",
+      "name_fa": "پزشک فرضی ۹",
+      "specialty_code": "gastroenterology",
+      "expertise": [
+        "مرور اطلاعات اولیه",
+        "گفت‌وگوی گوارش"
+      ],
+      "score": 4.3,
+      "online": true
+    },
+    {
+      "id": "demo_doctor_10",
+      "name_fa": "پزشک فرضی ۱۰",
+      "specialty_code": "neurology",
+      "expertise": [
+        "مرور اطلاعات اولیه",
+        "گفت‌وگوی مغز و اعصاب"
+      ],
+      "score": 4.1,
+      "online": false
+    },
+    {
+      "id": "demo_doctor_11",
+      "name_fa": "پزشک فرضی ۱۱",
+      "specialty_code": "cardiology",
+      "expertise": [
+        "مرور اطلاعات اولیه",
+        "گفت‌وگوی قلب"
+      ],
+      "score": 4,
+      "online": true
+    },
+    {
+      "id": "demo_doctor_12",
+      "name_fa": "پزشک فرضی ۱۲",
+      "specialty_code": "pulmonology",
+      "expertise": [
+        "مرور اطلاعات اولیه",
+        "گفت‌وگوی ریه"
+      ],
+      "score": 4.9,
+      "online": true
+    }
+  ]
+}

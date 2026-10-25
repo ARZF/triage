@@ -26,7 +26,7 @@ These rules apply to the entire repository.
 - Use explicit PowerShell commands from the repository root:
 
 ```powershell
-.\.venv\Scripts\python.exe -m pip install -e ".[dev]"
+.\.venv\Scripts\python.exe -m pip install -e .
 .\.venv\Scripts\python.exe -m unittest discover tests
 .\.venv\Scripts\python.exe -m uvicorn app.main:app --app-dir src
 ```

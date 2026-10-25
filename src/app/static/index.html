@@ -72,6 +72,17 @@
     .chip { background: var(--tint); border: 1px solid var(--line); border-radius: 16px; padding: 4px 12px; font-size: 14px; overflow-wrap: anywhere; }
     .vocabulary-note { margin-top: var(--space-md); }
     footer { margin-top: var(--space-md); }
+
+    #triage { border-top: 1px solid var(--line); padding: var(--space-lg); }
+    #triage h2 { font-size: 22px; }
+    #triage-status, #triage-details p { overflow-wrap: anywhere; white-space: pre-wrap; }
+    #triage-retry { margin-top: var(--space-sm); }
+    .urgency, .online { display: inline-block; padding: 4px 10px; border-radius: 16px; background: var(--tint); margin-bottom: var(--space-sm); }
+    .urgency[data-level="urgent"], .urgency[data-level="emergency"] { background: #f8e8e6; color: var(--danger); }
+    .doctor-card { border: 1px solid var(--line); border-radius: 8px; margin-top: var(--space-md); padding: var(--space-md); }
+    .doctor-card h3 { margin: 0 0 var(--space-sm); font-size: 18px; }
+    .doctor-expertise { display: flex; flex-wrap: wrap; gap: var(--space-sm); }
+
     @media (max-width: 720px) {
       .shell { padding: var(--space-lg) var(--space-md); }
       header { flex-direction: column; align-items: stretch; }
@@ -114,6 +125,12 @@
           </div>
           <p id="error" role="alert"></p>
         </form>
+        <section id="triage" hidden aria-labelledby="triage-title">
+          <h2 id="triage-title">پیشنهاد تخصص و پزشکان فرضی</h2>
+          <p id="triage-status" role="status" aria-live="polite"></p>
+          <div id="triage-details"></div>
+          <button id="triage-retry" type="button" hidden>تلاش دوباره</button>
+        </section>
       </section>
       <aside aria-labelledby="collected-title">
         <h2 id="collected-title">اطلاعات ثبت‌شده</h2>
@@ -191,6 +208,74 @@
       reset.disabled = busy;
       forget.disabled = busy || !patientId;
     }
+    const triagePanel = document.getElementById("triage");
+    const triageStatus = document.getElementById("triage-status");
+    const triageDetails = document.getElementById("triage-details");
+    const triageRetry = document.getElementById("triage-retry");
+    function clearTriage() {
+      triagePanel.hidden = true;
+      triageDetails.replaceChildren();
+      triageStatus.textContent = "";
+      triageRetry.hidden = true;
+    }
+    async function loadTriage(state) {
+      triagePanel.hidden = false;
+      triageDetails.replaceChildren();
+      triageRetry.hidden = true;
+      triageStatus.textContent = "در حال آماده‌سازی پیشنهاد تخصص...";
+      try {
+        const result = await request("/v1/chat/sessions/" + encodeURIComponent(state.session_id) + "/triage", undefined, "POST", 125000);
+        triageStatus.textContent = result.source === "fallback" ? "پیشنهاد عمومی؛ نتیجه‌ای از هوش مصنوعی دریافت نشد." : "پیشنهاد تخصص آماده است.";
+        const specialty = document.createElement("h3");
+        specialty.textContent = result.specialty.name_fa;
+        const urgency = document.createElement("span");
+        urgency.className = "urgency";
+        urgency.dataset.level = result.urgency;
+        urgency.textContent = "فوریت: " + {routine: "معمول", soon: "به‌زودی", urgent: "فوری", emergency: "اورژانسی", unknown: "نامشخص"}[result.urgency];
+        const notice = document.createElement("p");
+        notice.textContent = result.notice;
+        triageDetails.append(specialty, urgency);
+        if (result.reason) {
+          const reason = document.createElement("p");
+          reason.textContent = result.reason;
+          triageDetails.append(reason);
+        }
+        triageDetails.append(notice);
+        for (const doctor of result.doctors) {
+          const card = document.createElement("article");
+          card.className = "doctor-card";
+          const name = document.createElement("h3");
+          name.textContent = doctor.name_fa;
+          const score = document.createElement("p");
+          score.textContent = "امتیاز " + doctor.score.toLocaleString("fa-IR", {minimumFractionDigits: 1, maximumFractionDigits: 1}) + " از ۵";
+          const online = document.createElement("span");
+          online.className = "online";
+          online.textContent = doctor.online ? "آنلاین" : "آفلاین";
+          const tags = document.createElement("div");
+          tags.className = "doctor-expertise";
+          for (const text of doctor.expertise) {
+            const tag = document.createElement("span");
+            tag.className = "chip";
+            tag.textContent = text;
+            tags.append(tag);
+          }
+          card.append(name, score, online, tags);
+          triageDetails.append(card);
+        }
+      } catch {
+        triageStatus.textContent = "دریافت پیشنهاد انجام نشد. دوباره تلاش کنید.";
+        triageRetry.hidden = false;
+      }
+    }
+    triageRetry.addEventListener("click", async () => {
+      if (busy || !current?.done || current.emergency) return;
+      busy = true;
+      triageRetry.disabled = true;
+      controls();
+      try { await loadTriage(current); }
+      finally { busy = false; triageRetry.disabled = false; controls(); }
+    });
+
     function rememberPatient(id) {
       patientId = id;
       try {
@@ -326,12 +411,12 @@
       }
       statusLine.textContent = state.emergency ? "توقف اضطراری" : state.done ? "ثبت اطلاعات تکمیل شد" : "مرحلهٔ فعلی: " + fieldLabels[state.step];
     }
-    async function request(path, body, method = "POST") {
+    async function request(path, body, method = "POST", timeout = 10000) {
       const response = await fetch(path, {
         method,
         headers: body ? {"Content-Type": "application/json"} : {},
         body: body ? JSON.stringify(body) : undefined,
-        signal: AbortSignal.timeout(10000)
+        signal: AbortSignal.timeout(timeout)
       });
       if (!response.ok) {
         const error = new Error("درخواست ناموفق بود (کد " + response.status.toLocaleString("fa-IR") + "). برای ادامه «شروع دوباره» را بزنید.");
@@ -352,6 +437,7 @@
       busy = true;
       controls();
       errorLine.textContent = "";
+      clearTriage();
       try {
         // ponytail: each dropdown is capped at 100 entries; add search when vocabulary grows beyond this.
         for (const [kind, step] of [["symptoms", "symptoms"], ["medicines", "medications"]]) {
@@ -392,6 +478,7 @@
         bubble(state.reply, "bot");
         input.value = "";
         render(state);
+        if (state.done && !state.emergency) await loadTriage(state);
       } catch (error) { fail(error); }
       finally { busy = false; controls(); if (!input.disabled) input.focus(); }
     });
@@ -433,6 +520,7 @@
         current = null;
         blocked = false;
         historyVersion++;
+        clearTriage();
         draftMedicines = [];
         renderMedicineList();
         medicineEditor.hidden = true;

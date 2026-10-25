@@ -1,8 +1,8 @@
 # Healthcare Agent
 
-Slices 1a, 2a, and 2b provide scripted intake, vocabulary matching, and SQLite
-patient memory using synthetic data only. No LLM, authentication, diagnosis,
-or treatment advice is implemented.
+Slices 1a, 2a, 2b, and 3 provide scripted intake, vocabulary matching, SQLite
+patient memory, and optional AI specialty triage using synthetic data only.
+No authentication, patient-facing diagnosis, booking, or treatment advice is implemented.
 
 ## Setup
 
@@ -10,7 +10,7 @@ Requires Python 3.14 or later. From the repository root in PowerShell:
 
 ```powershell
 python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -e ".[dev]"
+.\.venv\Scripts\python.exe -m pip install -e .
 .\.venv\Scripts\python.exe -m uvicorn app.main:app --app-dir src
 ```
 
@@ -123,6 +123,73 @@ answer that triggers the fixed red-flag stop is replaced in the message log
 by a fixed Persian placeholder; the triggering text is not stored in collected
 data or code arrays. Further messages to completed sessions change nothing.
 
+
+## AI specialty triage (Slice 3)
+
+After a non-emergency intake completes, the demo automatically calls
+`POST /v1/chat/sessions/{session_id}/triage`. It shows a loading line, then
+the specialty, urgency, optional reason, a fixed notice that this is a
+suggestion rather than a medical diagnosis, and matching fictional doctors.
+Cards show expertise, online status and scores in Persian digits. Request
+failures offer Retry. Reset and forget-me clear the displayed suggestion.
+There is no booking, doctor account, authentication or treatment advice.
+
+The response is `{session_id, source, specialty: {code, name_fa}, urgency,
+emergency, reason, notice, doctors: [{id, name_fa, expertise, score, online}]}`.
+An unknown session returns 404; unfinished and emergency-stop intakes return
+409 in ErrorResponse format. Provider urgency emergency returns no doctors
+and uses the existing emergency notice. Doctors sort online first, then by
+descending score, with at most ten results.
+
+Without a configured provider, or if it times out or returns an invalid
+result, a general-practice fallback is stored with source=fallback,
+urgency=unknown and no reason. A stored result is reused on every later call
+for that session, including fallback results; Retry recovers an HTTP failure
+rather than rerunning an already stored result. A new intake can create a
+new result.
+
+The provider receives only the current structured intake and up to three
+previous completed non-emergency visits, with dates, matched vocabulary names
+and any previous triage specialty. Free text is capped at 500 characters.
+Patient/session identifiers and transcripts are excluded. The database
+connection closes before the synchronous provider call; a later transaction
+stores the first result. Concurrent first requests may duplicate provider
+work, but only one result is stored.
+
+**Synthetic data only.** The provider receives structured health data.
+A data-processing agreement, a lawful basis and a data-location decision are
+required before real data, alongside authentication, encryption, consent,
+retention rules and audit. AI considerations are unverified and doctor-only.
+The stored doctor summary and considerations are never returned by the
+patient endpoint. Only outcome categories are logged.
+
+`src/app/data/doctors.json` contains 12 obviously fictional doctors and nine
+specialties, labeled `synthetic demo data, not real doctors`. Edit the file
+locally and restart the server; validation runs at startup. IDs/codes are
+unique lowercase slugs, specialties must be known, scores are 0-5, and at
+least one general-practice doctor is required.
+
+Optional settings, read from the process environment without loading .env:
+
+- `APP_LLM_BASE_URL`: HTTP/HTTPS base URL, including any /v1 prefix. Do not
+  put credentials, query strings or fragments in it.
+- `APP_LLM_MODEL`: model identifier. URL and model together enable calls.
+- `APP_LLM_API_KEY`: optional bearer key, excluded from Settings repr.
+- `APP_LLM_TIMEOUT_SECONDS`: finite float from 1 to 120; default 30.
+
+Invalid LLM settings raise ValueError naming only the variable. For a
+synthetic local provider, set its actual model identifier before startup:
+
+```powershell
+$env:APP_LLM_BASE_URL = "http://127.0.0.1:8080/v1"
+$env:APP_LLM_MODEL = "your-model-id"
+$env:APP_LLM_API_KEY = "" # Set only if your provider requires a key.
+$env:APP_LLM_TIMEOUT_SECONDS = "30"
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --app-dir src
+```
+
+Leave URL and model unset to test fallback. Never commit a real key.
+
 ## Vocabulary dictionaries
 
 `src/app/data/symptoms.json` and `medicines.json` each contain 12 generic
@@ -158,10 +225,15 @@ example, enter the generic name `استامینوفن` instead; it is vocabulary
 - `src/app/core/config.py`: frozen environment settings.
 - `src/app/core/db.py`: SQLite schema, per-operation connections, and UTC timestamps.
 - `src/app/core/errors.py`: shared exception handlers and registration.
+- `src/app/core/llm.py`: synchronous OpenAI-compatible provider client.
 - `src/app/core/logging_config.py`: logging setup and access-log disabling.
 - `src/app/api/health.py`, `chat.py`, `demo.py`, `dictionaries.py`, `patients.py`: HTTP routes.
 - `src/app/schemas/common.py`, `chat.py`, `dictionaries.py`, `patients.py`: request/response models.
 - `src/app/agent/intake.py`: pure immutable scripted state machine.
+- `src/app/agent/context.py`, `triage.py`, `doctors.py`: bounded context, stored specialty triage, and validated fictional doctors.
+- `src/app/schemas/triage.py`: provider-output and patient-response contracts.
+- `src/app/data/doctors.json`: fictional demo doctor directory.
+- `tests/test_llm.py`, `test_triage.py`: network-free provider, context, doctor and triage checks.
 - `src/app/agent/sessions.py`: transactional session storage, history, and deletion.
 - `src/app/agent/dictionaries.py`: validated loading, normalization, matching, and search.
 - `src/app/data/symptoms.json`, `medicines.json`: starter vocabulary sources.
@@ -186,7 +258,7 @@ and request bodies/headers are not logged.
 from the process environment every time a connection opens; `.env` is not loaded.
 For example: `$env:APP_DB_PATH = "synthetic-demo.db"`.
 Schema creation is idempotent on every connection and app startup, with foreign
-keys enabled and schema version 1. Connections close after each operation;
+keys enabled and schema version 2 (including cascading triage results). Connections close after each operation;
 message handling uses a single `BEGIN IMMEDIATE` transaction. Chat endpoints
 are synchronous so SQLite runs in FastAPI's threadpool.
 

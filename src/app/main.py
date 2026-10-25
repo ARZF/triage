@@ -8,6 +8,7 @@ from app.api.chat import router as chat_router
 from app.api.demo import router as demo_router
 from app.api.dictionaries import router as dictionary_router
 from app.agent.dictionaries import load_dictionaries
+from app.agent.doctors import load_doctors
 from app.core.config import Settings
 from app.core.db import connect
 from app.core.errors import register_exception_handlers
@@ -21,6 +22,7 @@ configure_logging(settings)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     load_dictionaries()
+    load_doctors()
     disable_access_logging()
     with closing(connect()):
         pass

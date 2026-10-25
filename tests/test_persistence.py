@@ -74,7 +74,7 @@ class PersistenceTests(unittest.TestCase):
             for value in (row["created_at"], row["updated_at"], messages[0]["created_at"]):
                 self.assertEqual(datetime.fromisoformat(value).utcoffset(), timedelta(0))
             self.assertEqual(connection.execute("PRAGMA foreign_keys").fetchone()[0], 1)
-            self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 1)
+            self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 2)
 
     def test_returning_profile_yes_prefills_and_skips_questions(self):
         first = self.complete(allergies="synthetic allergy")

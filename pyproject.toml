@@ -8,10 +8,7 @@ version = "0.1.0"
 description = "FastAPI backend for a healthcare agent."
 readme = "README.md"
 requires-python = ">=3.14"
-dependencies = ["fastapi", "uvicorn"]
-
-[project.optional-dependencies]
-dev = ["httpx"]
+dependencies = ["fastapi", "uvicorn", "httpx"]
 
 [tool.setuptools]
 package-dir = {"" = "src"}

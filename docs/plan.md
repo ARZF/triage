@@ -1,6 +1,6 @@
 # Healthcare Agent: Implementation Plan and Specification
 
-Status: Slices 1a, 2a, and 2b approved. Scripted intake, Persian demo, JSON vocabulary matching, and SQLite patient memory are in scope; future workflow decisions remain proposals.
+Status: Slices 1a, 2a, 2b, and 3 approved. Scripted intake, Persian demo, JSON vocabulary matching, and SQLite patient memory, and optional AI specialty triage are in scope; future workflow decisions remain proposals.
 
 ## 1. Purpose
 
@@ -9,12 +9,12 @@ at a time, with an explicit API contract and a runnable check for its behavior.
 
 ## 2. Current baseline
 
-- Python 3.14 or later; dependencies are FastAPI and Uvicorn.
+- Python 3.14 or later; dependencies are FastAPI, Uvicorn, and httpx.
 - `src/app/main.py` creates the FastAPI application, owns its lifespan, includes routers, and calls the core logging and exception-handler registration functions.
 - `GET /health` returns HTTP 200 with JSON `{"status": "ok"}`.
 - The health endpoint checks application responsiveness only.
 - FastAPI exposes interactive API documentation at `/docs`.
-- The app implements scripted intake, JSON vocabulary, and SQLite patient memory, without an LLM, authentication, diagnosis, or treatment advice.
+- The app implements scripted intake, JSON vocabulary, SQLite patient memory, and optional AI specialty triage; no authentication, patient-facing diagnosis, booking, or treatment advice.
 - `src/app/core/config.py` defines frozen settings read from `os.environ`. `APP_LOG_LEVEL` defaults to `INFO`; INFO, WARNING, ERROR, and CRITICAL are accepted (case insensitive). Invalid values fail startup. The application does not load `.env` files.
 
 ## 3. Project boundaries
@@ -177,6 +177,22 @@ Complete this section for each agreed feature before writing its code:
 - **Acceptance examples:** a completed intake survives fresh connections; reload shows profile and previous values; yes skips medication/allergy questions, no restarts age. Emergency/unfinished visits do not qualify. Red-flag text appears in no table. History retains missing dictionary codes. Forget-me cascades and stale local ids recover.
 - **Runnable check:** unittest discovery uses temporary SQLite files for all database-capable tests; cover persistence, profile paths, history/order/bounds, redaction, atomicity, deletion, settings overrides, and no-body compatibility. Reinstall, run Uvicorn, and exercise complete/reload/profile/history/forget-me in the demo.
 
+
+### Feature: Slice 3 - AI specialty triage and synthetic doctor suggestions
+
+- **Status:** approved.
+- **User outcome:** after a completed non-emergency synthetic intake, see a suggested specialty, urgency, notice, and matching fictional doctors; no booking or doctor accounts.
+- **Scope:** optional synchronous OpenAI-compatible chat-completions call, structured context, validated JSON, persistent idempotent results, and Persian demo cards. No authentication, diagnosis shown to patients, treatment, dosing, or new folders.
+- **API contract:** POST /v1/chat/sessions/{session_id}/triage returns 200 with {session_id, source: llm|fallback, specialty: {code, name_fa}, urgency: routine|soon|urgent|emergency|unknown, emergency, reason: str|null, notice, doctors: [{id, name_fa, expertise, score, online}]}. Unknown session returns 404; incomplete or emergency intake returns 409, both using ErrorResponse. Doctor-only fields are never exposed.
+- **Validation:** validate provider JSON with Pydantic: one of the nine available specialty codes; urgency routine|soon|urgent|emergency; reason_fa <=300, doctor_summary_fa <=1200, at most five considerations_fa strings of <=200 characters. Ignore unknown fields. Validate doctors.json at startup, including unique slug ids/codes, known specialties, score 0-5, and at least one general-practice doctor.
+- **Agent behavior:** fixed system prompt lists allowed specialties with Persian names, treats patient text as untrusted data, defines the JSON contract, and forbids diagnosis claims, treatment and dosing. Context contains current intake and matched names, plus up to three most recent previous completed non-emergency visits with date and triage specialty; no identifiers or transcripts. Each free-text value is capped at 500 characters. Doctors sort online first, score descending, maximum ten.
+- **Failure behavior:** unconfigured provider, invalid output, HTTP/transport failure or timeout stores general_practice, urgency unknown, source fallback, null reason and empty doctor-only fields. No network call when unconfigured. Read and close context connection before provider I/O; then INSERT OR IGNORE in a new transaction and return the stored row. Repeated requests reuse the stored result. Emergency provider urgency hides doctors and uses the fixed emergency notice.
+- **Access and data handling:** synthetic data only. The provider receives structured health data. Before real data, require a data-processing agreement, a lawful basis, and a data-location decision, plus the existing privacy prerequisites. AI considerations are unverified and doctor-only. Never log prompts, responses, headers, identifiers, credential-bearing URLs or keys; log only outcome categories.
+- **Configuration:** optional APP_LLM_BASE_URL (HTTP/HTTPS including any /v1 prefix), APP_LLM_API_KEY (excluded from repr), APP_LLM_MODEL, APP_LLM_TIMEOUT_SECONDS (finite float 1-120, default 30). Configured means URL and model are both set; no .env loading. Move existing httpx to runtime and remove dev extra. SQLite schema version 2 adds triage_results with cascading session foreign key. No new dependencies or folders.
+- **Demo:** automatically request triage after non-emergency completion; show loading, Persian specialty/urgency/reason/notice and fictional doctor cards with expertise, online state and Persian scores. Show retry after request failure; render using textContent.
+- **Acceptance examples:** no provider produces stored general-practice fallback and doctors; valid mocked output persists and selects sorted doctors; invalid specialty/JSON/timeout falls back; emergency urgency has no doctors; repeated call avoids provider I/O; patient deletion cascades; another connection can BEGIN IMMEDIATE during the provider call.
+- **Runnable check:** unittest discovery with temporary databases and httpx.MockTransport, plus a completed synthetic /demo intake without a provider. Attempt real-provider verification only when configured; otherwise explicitly report it unverified.
+
 ## 6. Coding and verification rules
 
 - Trace the affected flow and callers before changing shared behavior.
@@ -225,6 +241,10 @@ current. Report any unverified behavior or remaining limitations explicitly.
 - `src/app/core/config.py`: frozen environment settings.
 - `src/app/core/db.py`: SQLite schema, connections, message inserts, and UTC timestamps.
 - `src/app/core/errors.py`: HTTP, validation, and SQLite exception handlers and registration.
+- `src/app/core/llm.py`: synchronous provider transport with safe outcome categories.
+- `src/app/agent/context.py`, `triage.py`, `doctors.py`: bounded context, stored results, and fictional directory.
+- `src/app/schemas/triage.py` and `src/app/data/doctors.json`: triage contracts and synthetic doctors.
+- `tests/test_llm.py` and `tests/test_triage.py`: network-free Slice 3 checks.
 - `src/app/core/logging_config.py`: logging configuration and shared access-log disabling at import and lifespan startup.
 - `src/app/api/health.py`: health endpoint. `chat.py` adds the two /v1/chat POST routes; `demo.py` serves /demo.
 - `src/app/schemas/common.py`: `HealthResponse`, `ErrorResponse`, and its nested error model.
@@ -242,7 +262,7 @@ From the project root in PowerShell (create `.venv` first if absent):
 
 ```powershell
 python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -e ".[dev]"
+.\.venv\Scripts\python.exe -m pip install -e .
 .\.venv\Scripts\python.exe -m unittest discover tests
 .\.venv\Scripts\python.exe -m uvicorn app.main:app --app-dir src
 ```
@@ -403,3 +423,27 @@ Invalid APP_LOG_LEVEL still fails at import; HTTP exception headers and
 import-time logging settings are preserved. Searching repository files found
 no old import paths. No behavior, endpoint, schema, setting, error code, or
 message changes were made. No commits or pushes were made.
+
+## 14. Slice 3 implementation checklist
+
+- [x] Record the approved section 5 specification before application edits.
+- [x] Add secret-safe LLM settings, synchronous transport, strict result validation and outcome-only logging.
+- [x] Add and validate 12 fictional doctors across nine specialties at startup.
+- [x] Build bounded identifier-free context and persist the first result after closing the context connection.
+- [x] Add schema version 2, cascading deletion, the triage endpoint, fallback and emergency response behavior.
+- [x] Add Persian loading, specialty/urgency/reason/notice, doctor cards, retry and Reset/forget-me cleanup.
+- [x] Promote httpx to runtime, remove the dev extra and update install commands and configuration examples.
+- [x] Run all existing and new unittest checks with temporary databases and no provider network calls.
+- [x] Reinstall, start Uvicorn and verify fallback through the demo in an automated browser.
+
+### Slice 3 verification (2026-10-25)
+
+- Baseline: Ran 61 tests in 7.976s; OK. Final: Ran 84 tests in 11.182s; OK. The existing Starlette/httpx deprecation warning remains.
+- The requested pip install -e . succeeded, using the previously approved process-only proxy bypass. Package sources include doctors.json and all new modules; no folders or additional libraries were introduced.
+- Network-free tests cover request URL/auth/body/timeout, safe failure logging, settings, strict result bounds, doctors validation/order/limit, bounded context, v1-to-v2 schema initialization, persistence, repeat calls, emergency/404/409 paths, public field exclusion, cascade deletion and concurrent requests.
+- During a stubbed provider call, all context connections are closed and another connection can BEGIN IMMEDIATE. Deleting a patient during that call does not recreate data.
+- Uvicorn started with a dedicated temporary APP_DB_PATH. Live /health, /docs and /demo returned HTTP 200; OpenAPI exposes the public triage contract without doctor-only fields. The default healthcare_agent.db was not created.
+- Headless Chrome completed a Persian intake with no provider configured and showed the general-practice fallback, two fictional doctors, Persian scores, unknown urgency and fixed notice.
+- Automated page checks passed loading, failed-request Retry/recovery, Reset cleanup, inert rendering of HTML-like provider text, doctor-only field exclusion, and widths 320/375/414/768. Emergency-stop intake made no triage request.
+- No real provider was configured, so no real-provider result was tested. The native/browser UI-control runtimes could not initialize because their runtime files were missing; the demo check used installed headless Chrome. Manual visual inspection was not performed.
+- No commits or pushes were made. Stop after Slice 3.

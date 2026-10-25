@@ -38,7 +38,18 @@ CREATE TABLE IF NOT EXISTS messages (
 );
 CREATE INDEX IF NOT EXISTS sessions_patient_created ON sessions(patient_id, created_at);
 CREATE INDEX IF NOT EXISTS messages_session_id ON messages(session_id, id);
-PRAGMA user_version=1;
+CREATE TABLE IF NOT EXISTS triage_results (
+    session_id TEXT PRIMARY KEY REFERENCES sessions(id) ON DELETE CASCADE,
+    specialty_code TEXT NOT NULL,
+    urgency TEXT NOT NULL,
+    source TEXT NOT NULL,
+    reason_fa TEXT,
+    doctor_summary_fa TEXT NOT NULL,
+    considerations_fa TEXT NOT NULL,
+    model TEXT,
+    created_at TEXT NOT NULL
+);
+PRAGMA user_version=2;
 """
 
 
