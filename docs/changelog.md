@@ -5,6 +5,10 @@ move them into a dated version section when a release is made.
 
 ## Unreleased
 
+### Fixed
+
+- Allow configured providers to retry stored triage fallbacks and upgrade them after valid output; preserve fallback on failure and never overwrite a stored LLM result, including concurrent retries.
+
 ### Added
 
 - Slice 3: optional OpenAI-compatible specialty triage, bounded structured context, validated provider JSON, persistent fallback and idempotent results.

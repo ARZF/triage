@@ -182,15 +182,15 @@ Complete this section for each agreed feature before writing its code:
 
 - **Status:** approved.
 - **User outcome:** after a completed non-emergency synthetic intake, see a suggested specialty, urgency, notice, and matching fictional doctors; no booking or doctor accounts.
-- **Scope:** optional synchronous OpenAI-compatible chat-completions call, structured context, validated JSON, persistent idempotent results, and Persian demo cards. No authentication, diagnosis shown to patients, treatment, dosing, or new folders.
+- **Scope:** optional synchronous OpenAI-compatible chat-completions call, structured context, validated JSON, persistent results with retryable fallbacks, and Persian demo cards. No authentication, diagnosis shown to patients, treatment, dosing, or new folders.
 - **API contract:** POST /v1/chat/sessions/{session_id}/triage returns 200 with {session_id, source: llm|fallback, specialty: {code, name_fa}, urgency: routine|soon|urgent|emergency|unknown, emergency, reason: str|null, notice, doctors: [{id, name_fa, expertise, score, online}]}. Unknown session returns 404; incomplete or emergency intake returns 409, both using ErrorResponse. Doctor-only fields are never exposed.
 - **Validation:** validate provider JSON with Pydantic: one of the nine available specialty codes; urgency routine|soon|urgent|emergency; reason_fa <=300, doctor_summary_fa <=1200, at most five considerations_fa strings of <=200 characters. Ignore unknown fields. Validate doctors.json at startup, including unique slug ids/codes, known specialties, score 0-5, and at least one general-practice doctor.
 - **Agent behavior:** fixed system prompt lists allowed specialties with Persian names, treats patient text as untrusted data, defines the JSON contract, and forbids diagnosis claims, treatment and dosing. Context contains current intake and matched names, plus up to three most recent previous completed non-emergency visits with date and triage specialty; no identifiers or transcripts. Each free-text value is capped at 500 characters. Doctors sort online first, score descending, maximum ten.
-- **Failure behavior:** unconfigured provider, invalid output, HTTP/transport failure or timeout stores general_practice, urgency unknown, source fallback, null reason and empty doctor-only fields. No network call when unconfigured. Read and close context connection before provider I/O; then INSERT OR IGNORE in a new transaction and return the stored row. Repeated requests reuse the stored result. Emergency provider urgency hides doctors and uses the fixed emergency notice.
+- **Failure behavior:** unconfigured provider, invalid output, HTTP/transport failure or timeout stores general_practice, urgency unknown, source fallback, null reason and empty doctor-only fields. No network call when unconfigured. Read and close context connection before provider I/O; then INSERT OR IGNORE in a new transaction and return the stored row. A stored LLM row is returned without provider I/O. A stored fallback is returned without provider I/O when unconfigured; when configured, a later request calls the provider once. Valid output updates only WHERE session_id matches AND source='fallback', never an LLM row. Failed retries return the stored result with HTTP 200 without changing it. Every provider call occurs after closing the context connection, outside any SQLite transaction. When no row is stored, retain INSERT OR IGNORE behavior, including storing fallback. Each user retry costs one provider call; no cooldown or rate limit is implemented, and per-session cooldown/rate limiting with authentication is the upgrade path. Emergency provider urgency hides doctors and uses the fixed emergency notice.
 - **Access and data handling:** synthetic data only. The provider receives structured health data. Before real data, require a data-processing agreement, a lawful basis, and a data-location decision, plus the existing privacy prerequisites. AI considerations are unverified and doctor-only. Never log prompts, responses, headers, identifiers, credential-bearing URLs or keys; log only outcome categories.
 - **Configuration:** optional APP_LLM_BASE_URL (HTTP/HTTPS including any /v1 prefix), APP_LLM_API_KEY (excluded from repr), APP_LLM_MODEL, APP_LLM_TIMEOUT_SECONDS (finite float 1-120, default 30). Configured means URL and model are both set; no .env loading. Move existing httpx to runtime and remove dev extra. SQLite schema version 2 adds triage_results with cascading session foreign key. No new dependencies or folders.
 - **Demo:** automatically request triage after non-emergency completion; show loading, Persian specialty/urgency/reason/notice and fictional doctor cards with expertise, online state and Persian scores. Show retry after request failure; render using textContent.
-- **Acceptance examples:** no provider produces stored general-practice fallback and doctors; valid mocked output persists and selects sorted doctors; invalid specialty/JSON/timeout falls back; emergency urgency has no doctors; repeated call avoids provider I/O; patient deletion cascades; another connection can BEGIN IMMEDIATE during the provider call.
+- **Acceptance examples:** no provider produces stored general-practice fallback and doctors; valid mocked output persists and selects sorted doctors; invalid specialty/JSON/timeout falls back; emergency urgency has no doctors; repeated calls after an LLM result avoid provider I/O; fallback then success upgrades the row, failed retries preserve it, unconfigured fallback makes no call, and concurrent first calls keep one row; patient deletion cascades; another connection can BEGIN IMMEDIATE during the provider call.
 - **Runnable check:** unittest discovery with temporary databases and httpx.MockTransport, plus a completed synthetic /demo intake without a provider. Attempt real-provider verification only when configured; otherwise explicitly report it unverified.
 
 ## 6. Coding and verification rules
@@ -447,3 +447,31 @@ message changes were made. No commits or pushes were made.
 - Automated page checks passed loading, failed-request Retry/recovery, Reset cleanup, inert rendering of HTML-like provider text, doctor-only field exclusion, and widths 320/375/414/768. Emergency-stop intake made no triage request.
 - No real provider was configured, so no real-provider result was tested. The native/browser UI-control runtimes could not initialize because their runtime files were missing; the demo check used installed headless Chrome. Manual visual inspection was not performed.
 - No commits or pushes were made. Stop after Slice 3.
+
+## 15. Stored fallback retry fix
+
+- [x] Keep stored LLM results immutable and return them without another provider call.
+- [x] Retry a stored fallback only when the provider is configured; valid output conditionally updates only source=fallback.
+- [x] Preserve stored results after failed retries and keep the original INSERT OR IGNORE path for first calls.
+- [x] Keep context connections closed and SQLite transactions absent during first and retry provider calls.
+- [x] Document the per-retry provider-call cost and the cooldown/rate-limit upgrade path.
+- [x] Run the full unittest suite before and after the fix, using temporary databases and no provider network calls.
+
+### Fallback retry verification (2026-10-25)
+
+Command: .\.venv\Scripts\python.exe -m unittest discover tests
+
+Before editing: Ran 84 tests in 13.243s; OK.
+After editing: Ran 88 tests in 13.731s; OK.
+
+The four new tests cover failed-provider fallback followed by success,
+failed retries preserving every stored fallback field, no provider call for
+unconfigured stored fallback, and delayed concurrent success/failure retries
+that cannot overwrite or return an older fallback after an LLM result wins.
+Existing tests still cover LLM reuse and two concurrent first calls keeping
+one row. Connection/transaction checks now exercise both first calls and
+fallback retries.
+
+The existing Starlette/httpx deprecation warning remains. Provider calls
+were mocked; no live-provider or browser check was run for this fix.
+No schema, endpoint, folder or dependency changes, commits or pushes.

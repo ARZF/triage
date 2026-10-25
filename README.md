@@ -143,18 +143,23 @@ descending score, with at most ten results.
 
 Without a configured provider, or if it times out or returns an invalid
 result, a general-practice fallback is stored with source=fallback,
-urgency=unknown and no reason. A stored result is reused on every later call
-for that session, including fallback results; Retry recovers an HTTP failure
-rather than rerunning an already stored result. A new intake can create a
-new result.
+urgency=unknown and no reason. A stored LLM result is reused without another
+provider call. A stored fallback is returned without a call while the
+provider is unconfigured. Once configured, a later POST to the same endpoint
+tries the provider again: valid output replaces only a fallback row, while
+failure returns the existing fallback with HTTP 200. An LLM row is never
+overwritten, including by concurrent retries. The demo Retry button still
+appears for HTTP request failures; fallback responses are not automatically
+retried. Each user retry can cost one provider call; there is no cooldown or
+rate limit yet.
 
 The provider receives only the current structured intake and up to three
 previous completed non-emergency visits, with dates, matched vocabulary names
 and any previous triage specialty. Free text is capped at 500 characters.
 Patient/session identifiers and transcripts are excluded. The database
 connection closes before the synchronous provider call; a later transaction
-stores the first result. Concurrent first requests may duplicate provider
-work, but only one result is stored.
+stores a first result or upgrades an existing fallback. Concurrent first
+requests may duplicate provider work, but only one result is stored.
 
 **Synthetic data only.** The provider receives structured health data.
 A data-processing agreement, a lawful basis and a data-location decision are

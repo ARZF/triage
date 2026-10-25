@@ -54,16 +54,19 @@ def run_triage(session_id: str) -> sqlite3.Row:
     with closing(db.connect()) as connection:
         _session(connection, session_id)
         stored = connection.execute("SELECT * FROM triage_results WHERE session_id=?", (session_id,)).fetchone()
-        if stored is not None:
+        if stored is not None and stored["source"] == "llm":
+            return stored
+        settings = Settings()
+        if stored is not None and not settings.llm_configured:
             return stored
         context = build_context(connection, session_id)
 
-    settings = Settings()
     result = {
         "specialty_code": "general_practice", "urgency": "unknown", "source": "fallback",
         "reason_fa": None, "doctor_summary_fa": "", "considerations_fa": [], "model": None,
     }
     if settings.llm_configured:
+        # ponytail: each user retry costs one provider call and there is no rate limit; add per-session cooldown and rate limiting with auth.
         # ponytail: synchronous call in a threadpool, one attempt, no retries; upgrade to an async client with bounded retries and a queue.
         try:
             output = llm.chat_completion(settings, [
@@ -81,17 +84,30 @@ def run_triage(session_id: str) -> sqlite3.Row:
         connection.execute("BEGIN IMMEDIATE")
         _session(connection, session_id)
         # ponytail: concurrent first requests can duplicate provider work; add per-session queue coordination when needed.
-        connection.execute(
-            """INSERT OR IGNORE INTO triage_results(
-                session_id, specialty_code, urgency, source, reason_fa,
-                doctor_summary_fa, considerations_fa, model, created_at
-            ) VALUES (
-                :session_id, :specialty_code, :urgency, :source, :reason_fa,
-                :doctor_summary_fa, :considerations_fa, :model, :created_at
-            )""",
-            {**result, "session_id": session_id, "created_at": db.utc_now(),
-             "considerations_fa": json.dumps(result["considerations_fa"], ensure_ascii=False)},
-        )
+        values = {
+            **result, "session_id": session_id, "created_at": db.utc_now(),
+            "considerations_fa": json.dumps(result["considerations_fa"], ensure_ascii=False),
+        }
+        if stored is not None and result["source"] == "llm":
+            connection.execute(
+                """UPDATE triage_results SET
+                    specialty_code=:specialty_code, urgency=:urgency, source=:source,
+                    reason_fa=:reason_fa, doctor_summary_fa=:doctor_summary_fa,
+                    considerations_fa=:considerations_fa, model=:model, created_at=:created_at
+                    WHERE session_id=:session_id AND source='fallback'""",
+                values,
+            )
+        else:
+            connection.execute(
+                """INSERT OR IGNORE INTO triage_results(
+                    session_id, specialty_code, urgency, source, reason_fa,
+                    doctor_summary_fa, considerations_fa, model, created_at
+                ) VALUES (
+                    :session_id, :specialty_code, :urgency, :source, :reason_fa,
+                    :doctor_summary_fa, :considerations_fa, :model, :created_at
+                )""",
+                values,
+            )
         return connection.execute("SELECT * FROM triage_results WHERE session_id=?", (session_id,)).fetchone()
 
 

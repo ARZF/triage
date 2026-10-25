@@ -7,7 +7,7 @@ import unittest
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
 from pathlib import Path
-from threading import Barrier
+from threading import Barrier, Event
 from unittest.mock import patch
 
 import httpx
@@ -219,6 +219,92 @@ class TriageTests(unittest.TestCase):
         self.assertEqual(response.json()["doctors"], [])
         self.assertEqual(response.json()["notice"], EMERGENCY_REPLY)
 
+    def test_failed_provider_fallback_is_replaced_on_successful_retry(self):
+        state = self.complete()
+        with self.configured(), patch.object(
+            llm, "chat_completion", side_effect=[llm.LLMError("transport_error"), VALID]
+        ) as call:
+            self.assert_fallback(self.client.post(self.endpoint(state)))
+            response = self.client.post(self.endpoint(state))
+        self.assertEqual(call.call_count, 2)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["source"], "llm")
+        self.assertEqual(response.json()["specialty"]["code"], VALID["specialty_code"])
+        self.assertEqual(response.json()["reason"], VALID["reason_fa"])
+        with closing(db.connect()) as connection:
+            rows = connection.execute("SELECT * FROM triage_results").fetchall()
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["session_id"], state["session_id"])
+        self.assertEqual(rows[0]["source"], "llm")
+        self.assertEqual(rows[0]["model"], "synthetic-model")
+        self.assertEqual(rows[0]["doctor_summary_fa"], VALID["doctor_summary_fa"])
+        self.assertEqual(json.loads(rows[0]["considerations_fa"]), VALID["considerations_fa"])
+
+    def test_failed_retry_keeps_stored_fallback_unchanged(self):
+        for outcome in (
+            llm.LLMError("transport_error"), llm.LLMError("invalid_response"),
+            {**VALID, "specialty_code": "invalid"},
+        ):
+            with self.subTest(outcome=type(outcome).__name__):
+                state = self.complete()
+                original = self.client.post(self.endpoint(state))
+                with closing(db.connect()) as connection:
+                    before = dict(connection.execute(
+                        "SELECT * FROM triage_results WHERE session_id=?", (state["session_id"],)
+                    ).fetchone())
+                options = {"side_effect": outcome} if isinstance(outcome, Exception) else {"return_value": outcome}
+                with self.configured(), patch.object(llm, "chat_completion", **options) as call:
+                    response = self.client.post(self.endpoint(state))
+                call.assert_called_once()
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.json(), original.json())
+                with closing(db.connect()) as connection:
+                    after = dict(connection.execute(
+                        "SELECT * FROM triage_results WHERE session_id=?", (state["session_id"],)
+                    ).fetchone())
+                self.assertEqual(after, before)
+
+    def test_unconfigured_stored_fallback_makes_no_provider_call(self):
+        state = self.complete()
+        original = self.client.post(self.endpoint(state))
+        with patch.object(llm, "chat_completion") as call:
+            response = self.client.post(self.endpoint(state))
+        call.assert_not_called()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), original.json())
+
+    def test_later_retry_cannot_overwrite_concurrent_llm_result(self):
+        for late_outcome in ({**VALID, "specialty_code": "dermatology"}, llm.LLMError("transport_error")):
+            with self.subTest(outcome=type(late_outcome).__name__):
+                state = self.complete()
+                self.assert_fallback(self.client.post(self.endpoint(state)))
+                started = Event()
+                release = Event()
+                def delayed(settings, messages):
+                    started.set()
+                    if not release.wait(timeout=10):
+                        raise AssertionError("Timed out waiting to finish the retry")
+                    if isinstance(late_outcome, Exception):
+                        raise late_outcome
+                    return late_outcome
+                with self.configured(), patch.object(llm, "chat_completion", side_effect=delayed):
+                    with ThreadPoolExecutor(max_workers=1) as pool:
+                        pending = pool.submit(triage.run_triage, state["session_id"])
+                        try:
+                            self.assertTrue(started.wait(timeout=10))
+                            with patch.object(llm, "chat_completion", return_value=VALID):
+                                winner = dict(triage.run_triage(state["session_id"]))
+                        finally:
+                            release.set()
+                        late = dict(pending.result(timeout=10))
+                self.assertEqual(winner["source"], "llm")
+                self.assertEqual(late, winner)
+                with closing(db.connect()) as connection:
+                    rows = connection.execute(
+                        "SELECT * FROM triage_results WHERE session_id=?", (state["session_id"],)
+                    ).fetchall()
+                self.assertEqual([dict(row) for row in rows], [winner])
+
     def test_repeated_call_reuses_stored_result(self):
         state = self.complete()
         with self.configured(), patch.object(llm, "chat_completion", return_value=VALID) as call:
@@ -252,24 +338,28 @@ class TriageTests(unittest.TestCase):
             self.assertEqual(connection.execute("SELECT COUNT(*) FROM triage_results").fetchone()[0], 0)
 
     def test_no_transaction_or_connection_held_during_provider_call(self):
-        state = self.complete()
-        original_connect = db.connect
-        opened = []
-        def track():
-            connection = original_connect()
-            opened.append(connection)
-            return connection
-        def complete(settings, messages):
-            self.assertTrue(opened)
-            for connection in opened:
-                with self.assertRaises(sqlite3.ProgrammingError):
-                    connection.execute("SELECT 1")
-            with closing(original_connect()) as independent:
-                independent.execute("BEGIN IMMEDIATE")
-                independent.rollback()
-            return VALID
-        with self.configured(), patch.object(db, "connect", side_effect=track), patch.object(llm, "chat_completion", side_effect=complete):
-            self.assertEqual(self.client.post(self.endpoint(state)).status_code, 200)
+        for retry in (False, True):
+            with self.subTest(retry=retry):
+                state = self.complete()
+                if retry:
+                    self.assert_fallback(self.client.post(self.endpoint(state)))
+                original_connect = db.connect
+                opened = []
+                def track():
+                    connection = original_connect()
+                    opened.append(connection)
+                    return connection
+                def complete(settings, messages):
+                    self.assertTrue(opened)
+                    for connection in opened:
+                        with self.assertRaises(sqlite3.ProgrammingError):
+                            connection.execute("SELECT 1")
+                    with closing(original_connect()) as independent:
+                        independent.execute("BEGIN IMMEDIATE")
+                        independent.rollback()
+                    return VALID
+                with self.configured(), patch.object(db, "connect", side_effect=track), patch.object(llm, "chat_completion", side_effect=complete):
+                    self.assertEqual(self.client.post(self.endpoint(state)).status_code, 200)
 
     def test_concurrent_results_return_the_same_stored_row(self):
         state = self.complete()
