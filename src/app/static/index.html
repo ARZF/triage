@@ -14,7 +14,7 @@
     }
     * { box-sizing: border-box; }
     body { margin: 0; background: var(--paper); color: var(--ink); font-family: var(--font-body); line-height: 1.55; }
-    button, input, select { font: inherit; }
+    button, input, select, textarea { font: inherit; }
     button { min-height: 44px; padding: 8px 20px; border: 1px solid var(--accent); border-radius: 6px; background: var(--accent); color: var(--surface); cursor: pointer; white-space: nowrap; }
     button:hover:not(:disabled) { filter: brightness(.9); }
     button:disabled { opacity: .5; cursor: default; }
@@ -44,7 +44,7 @@
     form { padding: var(--space-md) var(--space-lg) var(--space-lg); border-top: 1px solid var(--line); }
     label { display: block; font-size: 14px; font-weight: 650; margin-bottom: var(--space-sm); }
     .compose { display: flex; gap: var(--space-sm); }
-    input, select { width: 100%; min-width: 0; min-height: 46px; border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; color: var(--ink); background: var(--surface); }
+    input, select, textarea { width: 100%; min-width: 0; min-height: 46px; border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; color: var(--ink); background: var(--surface); }
     input:disabled, select:disabled { background: var(--paper); }
     #answer-choice { margin-bottom: var(--space-sm); }
     .medicines-step .compose { flex-wrap: wrap; }
@@ -83,6 +83,46 @@
     .doctor-card h3 { margin: 0 0 var(--space-sm); font-size: 18px; }
     .doctor-expertise { display: flex; flex-wrap: wrap; gap: var(--space-sm); }
 
+    /* Hallmark · component: inline review · genre: modern-minimal · theme: existing forest
+     * states: default · hover · focus · active · disabled · loading · error · success
+     * pre-emit critique: P4 H4 E4 S5 R5 V4 */
+    [hidden] { display: none !important; }
+    textarea { resize: vertical; min-height: 120px; line-height: 1.8; }
+    .compose:has(textarea:not([hidden])) { flex-wrap: wrap; }
+    .secondary { color: var(--accent); background: var(--surface); border-color: var(--line); }
+    #note-help { color: var(--muted); font-size: 14px; margin: 0 0 var(--space-md); }
+    #edit-cancel { margin-top: var(--space-sm); }
+    .review-card { flex-shrink: 0; align-self: stretch; min-width: 0; padding: var(--space-lg); border: 1px solid var(--line); border-radius: 16px; background: var(--surface); color: var(--ink); }
+    .review-card h3 { margin: 0; font-size: 21px; font-weight: 650; }
+    .review-intro { margin: var(--space-sm) 0 var(--space-lg); color: var(--muted); font-size: 14px; }
+    .review-group { padding-block: var(--space-md); border-top: 1px solid var(--line); }
+    .review-group h4 { margin: 0 0 var(--space-sm); font-size: 15px; color: var(--accent); }
+    .review-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-md); }
+    .review-fields:has(> :only-child) { grid-template-columns: minmax(0, 1fr); }
+    .review-field { min-width: 0; }
+    .review-field dt { color: var(--muted); }
+    .review-field dd { margin: 4px 0 0; line-height: 1.8; font-size: 14px; }
+    .review-field details { font-size: 14px; }
+    .review-field summary { min-height: 44px; cursor: pointer; overflow-wrap: anywhere; }
+    .review-field p { white-space: pre-wrap; overflow-wrap: anywhere; }
+    .review-field button { padding: 4px 12px; margin-top: var(--space-sm); font-size: 13px; }
+    .review-actions { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-sm); }
+    .review-actions button { flex: 1 1 auto; padding-inline: var(--space-md); }
+    .review-question { border-top: 1px solid var(--line); padding-top: var(--space-md); font-weight: 650; font-size: 15px; }
+    .review-error { color: var(--danger); min-height: 1lh; margin: var(--space-sm) 0 0; font-size: 14px; }
+    .review-card[data-state="error"] { border-color: var(--danger); }
+    .review-card[data-state="success"] { background: var(--tint); color: var(--ink); }
+    .review-card[data-state="success"] p { margin: var(--space-sm) 0 0; overflow-wrap: anywhere; font-size: 14px; }
+    .review-card[aria-busy="true"] { border-color: var(--accent); }
+    .review-card button:active:not(:disabled), .secondary:active:not(:disabled) { background: var(--tint); color: var(--ink); }
+    .review-card button:disabled { cursor: not-allowed; }
+    input[aria-invalid="true"], textarea[aria-invalid="true"] { border-color: var(--danger); }
+    .chat.reviewing #messages { height: auto; overflow: visible; }
+    .review-transcript summary { min-height: 44px; cursor: pointer; color: var(--muted); }
+    .review-transcript > div { max-height: 420px; overflow-y: auto; display: flex; flex-direction: column; gap: var(--space-md); padding-block: var(--space-md); }
+    @media (hover: hover) { .review-card .secondary:hover:not(:disabled), textarea:hover:not(:disabled) { background: var(--tint); color: var(--ink); } }
+    @media (max-width: 480px) { .review-card { padding: var(--space-md); } .review-fields { grid-template-columns: minmax(0, 1fr); } .review-actions { flex-direction: column; align-items: stretch; } }
+
     @media (max-width: 720px) {
       .shell { padding: var(--space-lg) var(--space-md); }
       header { flex-direction: column; align-items: stretch; }
@@ -116,14 +156,18 @@
           <p id="choice-help">از فهرست انتخاب کنید یا پاسخ را در کادر زیر بنویسید.</p>
           <label for="message">پاسخ شما</label>
           <div id="medicine-editor" hidden role="group" aria-labelledby="medicine-heading">
-            <p id="medicine-heading">فهرست داروهای واردشده</p>
+            <p id="medicine-heading">فهرست موارد انتخاب‌شده</p>
             <ul id="medicine-list" aria-live="polite"></ul>
           </div>
           <div class="compose">
             <input id="message" name="message" autocomplete="off" maxlength="2000" required disabled aria-describedby="error" placeholder="پاسخ ساختگی را بنویسید..." dir="auto">
+            <textarea id="patient-context" maxlength="2000" hidden disabled aria-label="توضیحات تکمیلی برای پزشک (اختیاری)" aria-describedby="note-help error" placeholder="اگر نکتهٔ دیگری هست که دوست دارید پزشک بداند، اینجا بنویسید..." dir="auto"></textarea>
             <button id="add-medicine" type="button" hidden disabled>افزودن</button>
             <button id="send" type="submit" disabled>ارسال</button>
+            <button id="skip-note" type="button" class="secondary" hidden>رد کردن</button>
           </div>
+          <p id="note-help" hidden>اختیاری · حداکثر ۲۰۰۰ نویسه. این توضیحات فقط برای پزشکِ پذیرنده نمایش داده می‌شود و برای هوش مصنوعی ارسال نمی‌شود. از اطلاعات شناسایی استفاده نکنید.</p>
+          <button id="edit-cancel" type="button" class="secondary" hidden>انصراف از ویرایش</button>
           <p id="error" role="alert"></p>
         </form>
         <section id="triage" hidden aria-labelledby="triage-title">
@@ -157,6 +201,10 @@
   </div>
   <script>
     const input = document.getElementById("message");
+    const contextInput = document.getElementById("patient-context");
+    const noteHelp = document.getElementById("note-help");
+    const skipNote = document.getElementById("skip-note");
+    const cancelEdit = document.getElementById("edit-cancel");
     const choice = document.getElementById("answer-choice");
     const choiceHelp = document.getElementById("choice-help");
     const medicineEditor = document.getElementById("medicine-editor");
@@ -166,9 +214,14 @@
     const customAnswer = "پاسخ را خودم می‌نویسم";
     const answerChoices = {
       age: [...Array.from({length: 121}, (_, age) => age.toLocaleString("fa-IR")), customAnswer],
+      height_cm: [...Array.from({length: 221}, (_, index) => (index + 30).toLocaleString("fa-IR")), customAnswer],
+      weight_kg: [...Array.from({length: 300}, (_, index) => (index + 1).toLocaleString("fa-IR")), customAnswer],
       duration: ["کمتر از یک روز", "یک روز", "دو تا سه روز", "چهار تا هفت روز", "بیشتر از یک هفته", customAnswer],
       severity: [...Array.from({length: 10}, (_, index) => (index + 1).toLocaleString("fa-IR")), customAnswer],
       medications: ["هیچ", customAnswer],
+      medical_history: ["ندارد", customAnswer],
+      medication_history: ["ندارد", customAnswer],
+      food_allergies: ["ندارد", customAnswer],
       allergies: ["ندارد", customAnswer],
       confirm: ["بله", "خیر"]
     };
@@ -184,10 +237,10 @@
     const messages = document.getElementById("messages");
     const errorLine = document.getElementById("error");
     const statusLine = document.getElementById("status");
-    const fieldLabels = {age: "سن", symptoms: "علائم", duration: "مدت علائم", severity: "شدت علائم", medications: "داروها", allergies: "حساسیت‌ها", confirm: "تأیید اطلاعات"};
+    const fieldLabels = {age: "سن", height_cm: "قد (سانتی‌متر)", weight_kg: "وزن (کیلوگرم)", chief_complaint: "شکایت بیمار", symptoms: "علائم", duration: "مدت علائم", severity: "شدت علائم", medical_history: "سابقه بیماری", medications: "داروهایی که مصرف می‌کنید", medication_history: "سابقه مصرف دارو", food_allergies: "حساسیت غذایی", allergies: "حساسیت دارویی / سایر حساسیت‌ها", additional_context: "توضیحات تکمیلی برای پزشک", confirm: "تأیید اطلاعات"};
     fieldLabels.profile = "تأیید اطلاعات قبلی";
     const fields = {};
-    for (const name of ["age", "symptoms", "duration", "severity", "medications", "allergies"]) {
+    for (const name of Object.keys(fieldLabels).filter(name => !["confirm", "profile"].includes(name))) {
       const row = document.createElement("div");
       row.className = "field";
       const label = document.createElement("dt");
@@ -202,10 +255,18 @@
     let current = null;
     let busy = false;
     let blocked = false;
-    let draftMedicines = [];
+    let draftSelections = [];
+    let editingField = null, reviewEditing = false, confirmationCard = null;
+    function answerStep() { return editingField || current?.step; }
+    function isListStep() { return ["symptoms", "medications"].includes(answerStep()); }
     function controls() {
-      input.disabled = busy || visitBusy || blocked || !current || current.done;
-      send.disabled = input.disabled || (current?.step === "medications" && !draftMedicines.length && !input.value.trim());
+      const locked = busy || visitBusy || blocked || !current || current.done;
+      const noteStep = answerStep() === "additional_context";
+      input.disabled = locked || noteStep || (current?.step === "confirm" && !editingField);
+      contextInput.disabled = locked || !noteStep;
+      send.disabled = locked || (current?.step === "confirm" && !editingField) || (isListStep() && !draftSelections.length && !input.value.trim());
+      skipNote.disabled = locked;
+      cancelEdit.disabled = locked;
       addMedicineButton.disabled = input.disabled || !input.value.trim();
       medicineItems.querySelectorAll("button").forEach(button => button.disabled = input.disabled);
       choice.disabled = input.disabled || choice.options.length <= 1;
@@ -213,6 +274,12 @@
       deleteAccount.disabled = busy || visitBusy;
       logout.disabled = busy || visitBusy;
       ownRequestList.querySelectorAll("button").forEach(button=>button.disabled=busy||visitBusy);
+      if (confirmationCard) {
+        confirmationCard.setAttribute("aria-busy", String(busy));
+        confirmationCard.querySelectorAll("button").forEach(button => button.disabled = locked || Boolean(editingField));
+        const confirmButton = confirmationCard.querySelector('[data-action="confirm"]');
+        if (confirmButton) confirmButton.textContent = busy && !editingField ? "در حال ثبت..." : "بله، تأیید می‌کنم";
+      }
       updateVisitButton();
     }
     const triagePanel = document.getElementById("triage");
@@ -383,9 +450,9 @@
         visitHistory.textContent = "دریافت سابقه ممکن نشد. برای تلاش دوباره، این بخش را باز کنید.";
       }
     }
-    function renderMedicineList() {
+    function renderSelectionList() {
       medicineItems.replaceChildren();
-      draftMedicines.forEach((name, index) => {
+      draftSelections.forEach((name, index) => {
         const item = document.createElement("li");
         const text = document.createElement("span");
         text.dir = "auto";
@@ -395,9 +462,9 @@
         remove.textContent = "حذف";
         remove.setAttribute("aria-label", "حذف " + name);
         remove.addEventListener("click", () => {
-          draftMedicines.splice(index, 1);
+          draftSelections.splice(index, 1);
           errorLine.textContent = "";
-          renderMedicineList();
+          renderSelectionList();
           controls();
           input.focus();
         });
@@ -405,23 +472,23 @@
         medicineItems.append(item);
       });
     }
-    function addMedicine() {
+    function addSelection() {
       const name = input.value.trim();
       if (input.disabled || !name) return false;
       const none = [noMedicine, "ندارد", "none", "no"].includes(name.toLowerCase());
-      const next = none ? [noMedicine] : draftMedicines.filter(value => value !== noMedicine);
+      const next = none ? [noMedicine] : draftSelections.filter(value => value !== noMedicine);
       if (!none && !next.some(value => value.toLowerCase() === name.toLowerCase())) next.push(name);
       if (next.join("، ").length > input.maxLength) {
-        errorLine.textContent = "طول فهرست داروها نباید بیشتر از ۲۰۰۰ نویسه باشد. نام‌ها را کوتاه‌تر کنید.";
+        errorLine.textContent = "طول فهرست نباید بیشتر از ۲۰۰۰ نویسه باشد. نام‌ها را کوتاه‌تر کنید.";
         input.focus();
         return false;
       }
-      draftMedicines = next;
+      draftSelections = next;
       input.value = "";
       input.setCustomValidity("");
       choice.value = "";
       errorLine.textContent = "";
-      renderMedicineList();
+      renderSelectionList();
       controls();
       input.focus();
       return true;
@@ -434,17 +501,143 @@
       messages.append(node);
       messages.scrollTop = messages.scrollHeight;
     }
+    function displayValue(name, value) {
+      if (value === null || value === undefined) return "ثبت نشده";
+      if (name === "additional_context" && !value) return "توضیحی اضافه نشده است";
+      return typeof value === "number" ? value.toLocaleString("fa-IR") : value;
+    }
+    function beginEdit(name) {
+      if (busy || visitBusy || current.done) return;
+      editingField = name;
+      errorLine.textContent = "";
+      const value = current.collected[name];
+      input.value = name === "additional_context" ? "" : String(value ?? "");
+      contextInput.value = name === "additional_context" ? value || "" : "";
+      draftSelections = isListStep() && value ? value.split("،").map(item => item.trim()).filter(Boolean) : [];
+      if (isListStep()) input.value = "";
+      render(current);
+      controls();
+      (name === "additional_context" ? contextInput : input).focus();
+    }
+    function renderConfirmation(state) {
+      if (state.step !== "confirm" || state.emergency) {
+        if (confirmationCard) confirmationCard.remove();
+        confirmationCard = null;
+        return;
+      }
+      if (!confirmationCard) {
+        const history = document.createElement("details"), summary = document.createElement("summary"), transcript = document.createElement("div");
+        history.className = "review-transcript";
+        summary.textContent = "مرور گفت‌وگوی قبلی";
+        transcript.append(...messages.querySelectorAll(":scope > .bubble"));
+        history.append(summary, transcript);
+        messages.append(history);
+        confirmationCard = document.createElement("section");
+      }
+      confirmationCard.className = "review-card";
+      confirmationCard.setAttribute("aria-labelledby", "final-review-title");
+      confirmationCard.dataset.state = state.done ? "success" : "default";
+      confirmationCard.replaceChildren();
+      const title = document.createElement("h3");
+      title.id = "final-review-title";
+      title.tabIndex = -1;
+      title.textContent = state.done ? "اطلاعات شما تأیید شد" : "یک نگاه نهایی به اطلاعات شما";
+      confirmationCard.append(title);
+      if (state.done) {
+        const summary = document.createElement("p");
+        summary.textContent = displayValue("age", state.collected.age) + " سال · " + (state.collected.chief_complaint || state.collected.symptoms || "اطلاعات این مراجعه ثبت شد").slice(0, 120);
+        confirmationCard.append(summary);
+        messages.append(confirmationCard);
+        return;
+      }
+      const intro = document.createElement("p");
+      intro.className = "review-intro";
+      intro.textContent = editingField ? "پاسخ را در کادر زیر اصلاح کنید؛ بقیهٔ اطلاعات حفظ می‌شود." : reviewEditing ? "موردی را که نیاز به اصلاح دارد انتخاب کنید." : "پیش از ادامه، خلاصهٔ پاسخ‌ها را بررسی کنید. هر مورد قابل اصلاح است.";
+      confirmationCard.append(intro);
+      const groups = [
+        ["مشخصات فردی", ["age", "height_cm", "weight_kg"]],
+        ["شرح مراجعه", ["chief_complaint", "symptoms", "duration", "severity"]],
+        ["سوابق و داروها", ["medical_history", "medications", "medication_history"]],
+        ["حساسیت‌ها", ["food_allergies", "allergies"]],
+        ["توضیحات تکمیلی · فقط برای پزشک", ["additional_context"]]
+      ];
+      for (const [label, names] of groups) {
+        const group = document.createElement("div"), heading = document.createElement("h4"), list = document.createElement("dl");
+        group.className = "review-group";
+        heading.textContent = label;
+        list.className = "review-fields";
+        for (const name of names) {
+          const row = document.createElement("div"), term = document.createElement("dt"), value = document.createElement("dd");
+          row.className = "review-field";
+          term.textContent = fieldLabels[name];
+          const text = displayValue(name, state.collected[name]);
+          if (text.length > 180) {
+            const details = document.createElement("details"), preview = document.createElement("summary"), full = document.createElement("p");
+            preview.textContent = text.slice(0, 100) + "… (نمایش کامل)";
+            full.textContent = text;
+            details.append(preview, full);
+            value.append(details);
+          } else value.textContent = text;
+          row.append(term, value);
+          if (reviewEditing) {
+            const edit = document.createElement("button");
+            edit.type = "button";
+            edit.className = "secondary";
+            edit.textContent = "ویرایش";
+            edit.setAttribute("aria-label", "ویرایش " + fieldLabels[name]);
+            edit.addEventListener("click", () => beginEdit(name));
+            row.append(edit);
+          }
+          list.append(row);
+        }
+        group.append(heading, list);
+        confirmationCard.append(group);
+      }
+      const question = document.createElement("p"), actions = document.createElement("div"), confirm = document.createElement("button"), edit = document.createElement("button"), error = document.createElement("p");
+      question.className = "review-question";
+      question.textContent = "اطلاعات ثبت‌شده رو بررسی کردید؟ همه موارد درسته؟";
+      actions.className = "review-actions";
+      confirm.type = edit.type = "button";
+      confirm.dataset.action = "confirm";
+      confirm.textContent = "بله، تأیید می‌کنم";
+      confirm.addEventListener("click", () => submitAnswer("بله"));
+      edit.className = "secondary";
+      edit.textContent = "ویرایش اطلاعات";
+      edit.setAttribute("aria-expanded", String(reviewEditing));
+      edit.addEventListener("click", () => { reviewEditing = !reviewEditing; renderConfirmation(current); controls(); confirmationCard.querySelector("h3").focus(); });
+      error.id = "review-error";
+      error.className = "review-error";
+      error.setAttribute("role", "alert");
+      actions.append(confirm, edit);
+      confirmationCard.append(question, actions, error);
+      messages.append(confirmationCard);
+    }
     function render(state) {
       current = state;
       returningNote.hidden = !state.returning;
-      const medicineStep = state.step === "medications";
-      medicineEditor.hidden = !medicineStep;
-      addMedicineButton.hidden = !medicineStep;
-      input.required = !medicineStep;
-      document.getElementById("chat-form").classList.toggle("medicines-step", medicineStep);
-      send.textContent = medicineStep ? "ثبت فهرست" : defaultSendLabel;
-      if (!medicineStep) draftMedicines = [];
-      renderMedicineList();
+      const step = answerStep(), noteStep = step === "additional_context";
+      const listStep = isListStep();
+      document.getElementById("chat-form").hidden = state.done || (state.step === "confirm" && !editingField);
+      document.querySelector(".chat").classList.toggle("reviewing", state.step === "confirm" && !state.done);
+      document.getElementById("medicine-heading").textContent = step === "symptoms" ? "فهرست علائم انتخاب‌شده" : "داروهایی که مصرف می‌کنید";
+      const inputLabel = document.querySelector('label[for="message"], label[for="patient-context"]');
+      inputLabel.textContent = fieldLabels[step] || "پاسخ شما";
+      inputLabel.htmlFor = noteStep ? "patient-context" : "message";
+      input.inputMode = ["height_cm", "weight_kg"].includes(step) ? "decimal" : ["age", "severity"].includes(step) ? "numeric" : "text";
+      input.hidden = noteStep;
+      contextInput.hidden = !noteStep;
+      noteHelp.hidden = skipNote.hidden = !noteStep;
+      cancelEdit.hidden = !editingField;
+      choice.hidden = noteStep;
+      document.querySelector('label[for="answer-choice"]').hidden = noteStep;
+      choiceHelp.hidden = noteStep;
+      medicineEditor.hidden = !listStep;
+      addMedicineButton.hidden = !listStep;
+      input.required = !listStep && !noteStep;
+      document.getElementById("chat-form").classList.toggle("medicines-step", listStep);
+      send.textContent = editingField ? "ذخیرهٔ اصلاحات" : listStep ? "ثبت فهرست" : noteStep ? "ثبت و ادامه" : defaultSendLabel;
+      if (!listStep) draftSelections = [];
+      renderSelectionList();
       for (const kind of ["symptoms", "medicines"]) {
         const chips = document.getElementById("matched-" + kind);
         chips.replaceChildren();
@@ -456,7 +649,7 @@
           chips.append(chip);
         }
       }
-      const options = answerChoices[state.step] || [];
+      const options = answerChoices[step] || [];
       choice.replaceChildren();
       for (const [index, text] of ["یک گزینه انتخاب کنید", ...options].entries()) {
         const option = document.createElement("option");
@@ -466,13 +659,14 @@
       }
       choiceHelp.textContent = options.length
         ? "از فهرست انتخاب کنید، سپس «ارسال» را بزنید. می‌توانید پاسخ را هم بنویسید."
-        : "برای شرح علائم، پاسخ را در کادر زیر بنویسید.";
-      if (medicineStep) choiceHelp.textContent = "داروها را یکی‌یکی از فهرست انتخاب کنید؛ برای نام دلخواه «افزودن» یا Enter را بزنید. سپس «ثبت فهرست» را بزنید.";
+        : "پاسخ را در کادر زیر بنویسید.";
+      if (listStep) choiceHelp.textContent = (step === "symptoms" ? "علائم" : "داروها") + " را یکی‌یکی از فهرست انتخاب کنید؛ برای مورد دلخواه «افزودن» یا کلید ورود را بزنید. سپس فهرست را ثبت کنید.";
       input.setCustomValidity("");
       for (const [name, node] of Object.entries(fields)) {
-        node.textContent = state.collected[name] === null ? "هنوز پاسخ داده نشده" : (typeof state.collected[name] === "number" ? state.collected[name].toLocaleString("fa-IR") : state.collected[name]);
+        node.textContent = state.collected[name] === null ? "هنوز پاسخ داده نشده" : displayValue(name, state.collected[name]);
       }
-      statusLine.textContent = state.emergency ? "توقف اضطراری" : state.done ? "ثبت اطلاعات تکمیل شد" : "مرحلهٔ فعلی: " + fieldLabels[state.step];
+      statusLine.textContent = state.emergency ? "توقف اضطراری" : state.done ? "ثبت اطلاعات تکمیل شد" : editingField ? "ویرایش: " + fieldLabels[editingField] : "مرحلهٔ فعلی: " + fieldLabels[state.step];
+      renderConfirmation(state);
     }
     async function request(path, body, method = "POST", timeout = 10000) {
       const response = await fetch(path, {
@@ -509,56 +703,102 @@
         // ponytail: each dropdown is capped at 100 entries; add search when vocabulary grows beyond this.
         for (const [kind, step] of [["symptoms", "symptoms"], ["medicines", "medications"]]) {
           const dictionary = await request("/v1/dictionaries/" + kind + "?limit=100", undefined, "GET");
-          answerChoices[step] = [...(step === "medications" ? [noMedicine] : []), ...dictionary.entries.map(entry => entry.name_fa), customAnswer];
+          answerChoices[step] = [noMedicine, ...dictionary.entries.map(entry => entry.name_fa), customAnswer];
         }
         const state = await request("/v1/chat/sessions");
         blocked = false;
         messages.replaceChildren();
+        confirmationCard = null;
+        editingField = null;
+        reviewEditing = false;
+        draftSelections = [];
         input.value = "";
+        contextInput.value = "";
         render(state);
         bubble(state.reply, "bot");
         await loadHistory();
       } catch (error) { fail(error); }
       finally { busy = false; controls(); if (!input.disabled) input.focus(); }
     }
-    document.getElementById("chat-form").addEventListener("submit", async (event) => {
-      event.preventDefault();
-      if (input.disabled) return;
-      const medicineStep = current.step === "medications";
-      if (medicineStep && input.value.trim() && !addMedicine()) return;
-      const text = medicineStep ? draftMedicines.join("، ") : input.value;
-      if (!text.trim()) return;
+    async function submitAnswer(text) {
+      if (busy || visitBusy || blocked || !current || current.done) return;
+      const edited = editingField;
       busy = true;
       controls();
       errorLine.textContent = "";
+      const reviewError = document.getElementById("review-error");
+      if (reviewError) reviewError.textContent = "";
       try {
-        const state = await request("/v1/chat/sessions/" + current.session_id + "/messages", {message: text});
-        bubble(text, "user");
-        bubble(state.reply, "bot");
+        const body = {message: text};
+        if (edited) body.edit_field = edited;
+        const state = await request("/v1/chat/sessions/" + current.session_id + "/messages", body);
+        bubble(edited ? fieldLabels[edited] + " اصلاح شد." : text === "رد کردن" ? "توضیحی اضافه نشد." : text, "user");
         input.value = "";
+        contextInput.value = "";
+        input.removeAttribute("aria-invalid");
+        contextInput.removeAttribute("aria-invalid");
+        editingField = null;
+        reviewEditing = false;
+        draftSelections = [];
         render(state);
+        if (state.step !== "confirm" || state.done) bubble(state.reply, "bot");
+        if (confirmationCard && !state.done) confirmationCard.querySelector("h3").focus();
         if (state.done && !state.emergency) await loadTriage(state);
-      } catch (error) { fail(error); }
-      finally { busy = false; controls(); if (!input.disabled) input.focus(); }
+      } catch (error) {
+        if (current.step === "confirm") {
+          const message = error.status === 422 ? "پاسخ معتبر نیست. مقدار را بررسی کنید و دوباره ذخیره کنید." : error.status === 409 ? "این بخش دیگر قابل ویرایش نیست. برای ادامه، پذیرش تازه‌ای شروع کنید." : "ثبت انجام نشد. اتصال را بررسی کنید و دوباره تلاش کنید؛ اطلاعات واردشده حفظ شده است.";
+          errorLine.textContent = message;
+          if (reviewError) reviewError.textContent = message;
+          if (confirmationCard) confirmationCard.dataset.state = "error";
+          if (error.status === 422) (edited === "additional_context" ? contextInput : input).setAttribute("aria-invalid", "true");
+        } else fail(error);
+      } finally {
+        busy = false;
+        controls();
+        if (!contextInput.disabled) contextInput.focus();
+        else if (!input.disabled) input.focus();
+      }
+    }
+    document.getElementById("chat-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (send.disabled) return;
+      const listStep = isListStep(), noteStep = answerStep() === "additional_context";
+      if (listStep && input.value.trim() && !addSelection()) return;
+      const text = noteStep ? contextInput.value.trim() || "رد کردن" : listStep ? draftSelections.join("، ") : input.value;
+      if (text.trim()) await submitAnswer(text);
+    });
+    skipNote.addEventListener("click", () => submitAnswer("رد کردن"));
+    contextInput.addEventListener("input", () => contextInput.removeAttribute("aria-invalid"));
+    cancelEdit.addEventListener("click", () => {
+      if (busy) return;
+      editingField = null;
+      input.value = contextInput.value = "";
+      draftSelections = [];
+      errorLine.textContent = "";
+      input.removeAttribute("aria-invalid");
+      contextInput.removeAttribute("aria-invalid");
+      render(current);
+      controls();
+      confirmationCard.querySelector("h3").focus();
     });
     input.addEventListener("invalid", () => input.setCustomValidity("لطفاً یک پاسخ ساختگی وارد کنید."));
     input.addEventListener("input", () => { input.setCustomValidity(""); controls(); });
     input.addEventListener("keydown", event => {
-      if (event.key === "Enter" && !event.isComposing && current?.step === "medications") {
+      if (event.key === "Enter" && !event.isComposing && isListStep()) {
         event.preventDefault();
-        if (input.value.trim()) addMedicine();
-        else if (draftMedicines.length) document.getElementById("chat-form").requestSubmit();
+        if (input.value.trim()) addSelection();
+        else if (draftSelections.length) document.getElementById("chat-form").requestSubmit();
       }
     });
-    addMedicineButton.addEventListener("click", addMedicine);
+    addMedicineButton.addEventListener("click", addSelection);
     choice.addEventListener("change", () => {
       const selected = choice.value;
       input.setCustomValidity("");
-      if (current?.step === "medications") {
+      if (isListStep()) {
         if (!selected) { input.focus(); return; }
-        if (selected !== noMedicine && input.value.trim() && !addMedicine()) return;
+        if (selected !== noMedicine && input.value.trim() && !addSelection()) return;
         input.value = selected;
-        if (addMedicine()) choice.focus();
+        if (addSelection()) choice.focus();
       } else {
         input.value = selected;
         controls();

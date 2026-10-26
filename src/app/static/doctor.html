@@ -30,7 +30,7 @@ const nameLine=document.getElementById("doctor-name"), available=document.getEle
 const dashboard=document.getElementById("dashboard"), waiting=document.getElementById("waiting"), requestList=document.getElementById("requests");
 const statusLine=document.getElementById("status"), errorLine=document.getElementById("error"), queueTab=document.getElementById("queue-tab"), acceptedTab=document.getElementById("accepted-tab");
 let user=null, items=[], specialtyNames={}, activeTab="pending", busy=false, loading=false;
-const labels={age:"سن",symptoms:"علائم",duration:"مدت علائم",severity:"شدت",medications:"داروها",allergies:"حساسیت‌ها"};
+const labels={age:"سن",height_cm:"قد (سانتی‌متر)",weight_kg:"وزن (کیلوگرم)",chief_complaint:"شکایت بیمار",symptoms:"علائم",duration:"مدت علائم",severity:"شدت",medical_history:"سابقه بیماری",medications:"داروهایی که مصرف می‌کنید",medication_history:"سابقه مصرف دارو",food_allergies:"حساسیت غذایی",allergies:"حساسیت دارویی / سایر حساسیت‌ها",additional_context:"توضیحات بیمار، فقط برای پزشک"};
 const urgencyLabels={routine:"معمول",soon:"به‌زودی",urgent:"فوری",emergency:"اورژانسی",unknown:"نامشخص"};
 async function request(path,body,method="GET"){
   const response=await fetch(path,{method,credentials:"same-origin",headers:body?{"Content-Type":"application/json"}:{},body:body?JSON.stringify(body):undefined,signal:AbortSignal.timeout(10000)});

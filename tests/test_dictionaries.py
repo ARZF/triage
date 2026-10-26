@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 
 from app.agent import dictionaries
 from app.main import app
-from helpers import as_patient, patient_of, register_patient
+from helpers import as_patient, intake_answers, patient_of, register_patient
 
 
 class DictionaryTests(unittest.TestCase):
@@ -206,7 +206,7 @@ class DictionaryApiTests(unittest.TestCase):
         self.assertEqual(created.status_code, 201)
         self.assertEqual(created.json()["matched"], {"symptoms": [], "medicines": []})
         path = "/v1/chat/sessions/" + created.json()["session_id"] + "/messages"
-        for answer in ("۳۰", "سرفه و تب خفیف", "دو روز", "۳", "هیچ", "ندارد", "بله"):
+        for answer in intake_answers("۳۰", "سرفه و تب خفیف", "دو روز", "۳", "هیچ", "ندارد", "بله"):
             response = self.client.post(path, json={"message": answer})
             self.assertEqual(response.status_code, 200)
         state = response.json()
@@ -220,21 +220,23 @@ class DictionaryApiTests(unittest.TestCase):
     def test_medicine_matches_and_reset_clear_matches(self):
         session_id = self.client.post("/v1/chat/sessions").json()["session_id"]
         path = f"/v1/chat/sessions/{session_id}/messages"
-        for answer in ("30", "cough", "two days", "3", "استامینوفن و ibuprofen"):
+        for answer in intake_answers(medications="استامینوفن و ibuprofen")[:9]:
             response = self.client.post(path, json={"message": answer})
             self.assertEqual(response.status_code, 200)
         self.assertEqual(
             [entry["code"] for entry in response.json()["matched"]["medicines"]],
             ["acetaminophen", "ibuprofen"],
         )
-        self.client.post(path, json={"message": "none"})
+        for answer in ("none", "none", "none", "رد کردن"):
+            self.client.post(path, json={"message": answer})
         response = self.client.post(path, json={"message": "no"})
         self.assertEqual(response.json()["matched"], {"symptoms": [], "medicines": []})
 
     def test_red_flag_answer_produces_no_symptom_matches(self):
         session_id = self.client.post("/v1/chat/sessions").json()["session_id"]
         path = f"/v1/chat/sessions/{session_id}/messages"
-        self.client.post(path, json={"message": "30"})
+        for answer in intake_answers()[:4]:
+            self.client.post(path, json={"message": answer})
         response = self.client.post(path, json={"message": "سرفه و درد سینه"})
         state = response.json()
         self.assertTrue(state["emergency"])
@@ -247,7 +249,8 @@ class DictionaryApiTests(unittest.TestCase):
             with self.subTest(code=entry["code"]):
                 session_id = self.client.post("/v1/chat/sessions").json()["session_id"]
                 path = f"/v1/chat/sessions/{session_id}/messages"
-                self.client.post(path, json={"message": "30"})
+                for answer in intake_answers()[:4]:
+                    self.client.post(path, json={"message": answer})
                 response = self.client.post(path, json={"message": entry["name_fa"]})
                 self.assertEqual(response.status_code, 200)
                 state = response.json()
@@ -261,12 +264,12 @@ class DictionaryApiTests(unittest.TestCase):
             with self.subTest(code=entry["code"]):
                 session_id = self.client.post("/v1/chat/sessions").json()["session_id"]
                 path = f"/v1/chat/sessions/{session_id}/messages"
-                for answer in ("30", "cough", "two days", "3"):
+                for answer in intake_answers()[:8]:
                     self.client.post(path, json={"message": answer})
                 response = self.client.post(path, json={"message": entry["name_fa"]})
                 self.assertEqual(response.status_code, 200)
                 state = response.json()
-                self.assertEqual(state["step"], "allergies")
+                self.assertEqual(state["step"], "medication_history")
                 self.assertEqual(state["collected"]["medications"], entry["name_fa"])
                 self.assertIn(entry["code"], [match["code"] for match in state["matched"]["medicines"]])
 
@@ -275,7 +278,7 @@ class DictionaryApiTests(unittest.TestCase):
         medications = "، ".join([entry["name_fa"] for entry in names] + ["نام ساختگی نامرتبط"])
         session_id = self.client.post("/v1/chat/sessions").json()["session_id"]
         path = f"/v1/chat/sessions/{session_id}/messages"
-        for answer in ("30", "cough", "two days", "3", medications, "none", "yes"):
+        for answer in intake_answers(medications=medications):
             response = self.client.post(path, json={"message": answer})
             self.assertEqual(response.status_code, 200)
         state = response.json()

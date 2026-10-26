@@ -1,12 +1,13 @@
 from pydantic import BaseModel, Field, computed_field
 
 from app.agent.dictionaries import match
-from app.agent.intake import Collected, Step
+from app.agent.intake import AnswerField, Collected, Step
 from app.schemas.dictionaries import MatchedEntry
 
 
 class MessageRequest(BaseModel):
     message: str = Field(min_length=1, max_length=2000)
+    edit_field: AnswerField | None = None
 
 
 class Matched(BaseModel):

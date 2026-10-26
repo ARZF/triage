@@ -6,6 +6,11 @@ from app.core import db
 PASSWORD = "synthetic-password"
 
 
+def intake_answers(age="30", symptoms="cough", duration="two days", severity="3", medications="none", allergies="none", confirm="yes", additional_context="رد کردن"):
+    return (age, "170.5", "70.2", "synthetic complaint", symptoms, duration, severity,
+            "none", medications, "none", "none", allergies, additional_context, confirm)
+
+
 def register_patient(client):
     username = "patient_" + uuid4().hex[:12]
     response = client.post("/v1/auth/register", json={

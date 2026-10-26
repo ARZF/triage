@@ -20,7 +20,7 @@ from app.agent.context import build_context
 from app.agent.intake import EMERGENCY_REPLY
 from app.core import db, llm
 from app.main import app
-from helpers import as_patient, patient_of, register_patient
+from helpers import as_patient, intake_answers, patient_of, register_patient
 
 VALID = {
     "specialty_code": "internal_medicine", "urgency": "soon",
@@ -133,12 +133,12 @@ class TriageTests(unittest.TestCase):
             self.user["patient_id"] = patient_id
         return self.client.post("/v1/chat/sessions").json()
 
-    def complete(self, patient_id=None):
+    def complete(self, patient_id=None, additional_context="رد کردن"):
         state = self.create(patient_id)
         path = f"/v1/chat/sessions/{state['session_id']}/messages"
         if state["step"] == "profile":
             self.client.post(path, json={"message": "no"})
-        for message in ("30", "cough", "two days", "3", "ibuprofen", "none", "yes"):
+        for message in intake_answers(medications="ibuprofen", additional_context=additional_context):
             response = self.client.post(path, json={"message": message})
             self.assertEqual(response.status_code, 200)
         return response.json()
@@ -169,6 +169,19 @@ class TriageTests(unittest.TestCase):
             response = self.client.post(self.endpoint(state))
         call.assert_not_called()
         self.assert_fallback(response)
+
+    def test_patient_notes_never_enter_provider_context_current_or_previous(self):
+        previous = self.complete(additional_context="previous_doctor_note_marker")
+        state = self.complete(patient_of(previous), additional_context="current_doctor_note_marker")
+        with self.configured(), patch.object(llm, "chat_completion", return_value=VALID) as call:
+            self.assertEqual(self.client.post(self.endpoint(state)).status_code, 200)
+        payload = json.dumps(call.call_args.args[1])
+        for forbidden in ("previous_doctor_note_marker", "current_doctor_note_marker", "additional_context"):
+            self.assertNotIn(forbidden, payload)
+        with closing(db.connect()) as connection:
+            context = build_context(connection, state["session_id"], for_doctor=True)
+        self.assertEqual(context["current"]["additional_context"], "current_doctor_note_marker")
+        self.assertEqual(context["previous_visits"][0]["additional_context"], "previous_doctor_note_marker")
 
     def test_valid_result_stores_private_fields_but_returns_only_public_contract(self):
         state = self.complete()
@@ -409,7 +422,7 @@ class TriageTests(unittest.TestCase):
             connection.execute("DROP TABLE triage_results")
             connection.execute("PRAGMA user_version=1")
         with closing(db.connect()) as connection:
-            self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 3)
+            self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 5)
             self.assertEqual(connection.execute("SELECT age FROM sessions WHERE id=?", (state["session_id"],)).fetchone()[0], 30)
             self.assertEqual(connection.execute("SELECT COUNT(*) FROM triage_results").fetchone()[0], 0)
 
@@ -426,8 +439,8 @@ class TriageTests(unittest.TestCase):
         incomplete = self.create(patient_id)
         path = f"/v1/chat/sessions/{incomplete['session_id']}/messages"
         self.client.post(path, json={"message": "no"})
-        self.client.post(path, json={"message": "30"})
-        self.client.post(path, json={"message": "chest pain"})
+        for answer in ("30", "170", "70", "chest pain"):
+            self.client.post(path, json={"message": answer})
         unfinished = self.create(patient_id)
         with closing(db.connect()) as connection, connection:
             for excluded in (incomplete, unfinished):

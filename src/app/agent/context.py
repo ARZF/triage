@@ -3,7 +3,7 @@ import sqlite3
 from app.agent.dictionaries import match
 
 
-def build_context(connection: sqlite3.Connection, session_id: str) -> dict:
+def build_context(connection: sqlite3.Connection, session_id: str, *, for_doctor: bool = False) -> dict:
     current = connection.execute("SELECT * FROM sessions WHERE id=?", (session_id,)).fetchone()
     if current is None:
         raise KeyError(session_id)
@@ -11,8 +11,12 @@ def build_context(connection: sqlite3.Connection, session_id: str) -> dict:
     def intake(row):
         fields = {
             name: row[name][:500] if isinstance(row[name], str) else row[name]
-            for name in ("age", "symptoms", "duration", "severity", "medications", "allergies")
+            # Explicit provider allowlist: never add free patient notes or transcripts here.
+            for name in ("age", "height_cm", "weight_kg", "chief_complaint", "symptoms", "duration", "severity",
+                         "medical_history", "medications", "medication_history", "food_allergies", "allergies")
         }
+        if for_doctor:
+            fields["additional_context"] = row["additional_context"]
         fields["matched"] = {
             "symptoms": [entry["name_fa"][:500] for entry in match("symptoms", row["symptoms"] or "")],
             "medicines": [entry["name_fa"][:500] for entry in match("medicines", row["medications"] or "")],

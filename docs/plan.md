@@ -15,6 +15,8 @@ at a time, with an explicit API contract and a runnable check for its behavior.
 - The health endpoint checks application responsiveness only.
 - FastAPI exposes interactive API documentation at `/docs`.
 - The app implements scripted intake, JSON vocabulary, SQLite patient memory, optional AI specialty triage, demo patient/doctor accounts and broadcast visit requests; no patient-facing diagnosis, direct chat, prescription or appointment scheduling.
+- The expanded Persian intake includes height/weight, main complaint, disease/medication histories and food/drug allergies, with multi-item symptom and medicine editors. Schema v4 adds nullable columns without resetting version-3 data.
+- Schema v5 adds optional doctor-only context, explicitly excluded from current/prior provider inputs. Final review is an inline Persian card with validated field-specific corrections before confirmation.
 - `src/app/core/config.py` defines frozen settings read from `os.environ`. `APP_LOG_LEVEL` defaults to `INFO`; INFO, WARNING, ERROR, and CRITICAL are accepted (case insensitive). Invalid values fail startup. The application does not load `.env` files.
 
 ## 3. Project boundaries
@@ -29,6 +31,8 @@ at a time, with an explicit API contract and a runnable check for its behavior.
 - Keep this plan consistent with implemented behavior; label proposed behavior clearly.
 
 - Slice 4 below supersedes earlier slice descriptions for identity, ownership, doctor storage/presence, route/response changes and schema version. Earlier entries remain a historical record. Only src/app/services/ was newly approved.
+- The expanded Persian intake feature below supersedes earlier question orders, returning-profile fields, single-symptom editor behavior and schema version. No additional folders are approved or created.
+- The doctor-only context/inline review feature supersedes the preceding intake's final steps and schema version: optional additional_context precedes confirm; corrections reuse the message route without another endpoint.
 
 ## 4. Decisions for persistence and future slices
 
@@ -213,6 +217,49 @@ Complete this section for each agreed feature before writing its code:
 - **Acceptance examples:** two online verified doctors see the same preview; concurrent accepts produce one 200 and one 409; the losing queue clears and the patient sees the winner. Different specialty/owner cannot access the request; full details appear only to the accepting doctor. Expired/cancelled requests allow a new request. Patient deletion cascades through users/tokens/intakes/requests. Unverified doctors never count as online.
 - **Runnable check:** run unittest discovery before and after with temporary databases and no provider network; register/login helpers use TestClient cookies and preserve existing behavioral assertions. Cover security, config, seed idempotency, auth/roles/ownership, time-controlled presence/expiry, request guards/atomic acceptance/detail isolation, cascades, no-store and pages. Reinstall, run Uvicorn with APP_DOCTOR_AUTO_VERIFY=true, and exercise two doctor browser sessions and one patient session; report automated/manual limits.
 - **NOT implemented:** admin approval of doctors, doctor credential checks, doctor account deletion, ratings/reviews, password reset, email verification, MFA, audit log, general rate limiting, HTTPS enforcement, chat or prescriptions. Existing real-data/provider prerequisites remain required.
+
+### Feature: Expanded Persian intake and multiple symptom selection
+
+- **Status:** implemented (approved by the user's intake-question request).
+- **User outcome:** record height, weight, main complaint, food/drug allergies, disease history and past medication use, and select several symptoms as easily as several medicines.
+- **Scope:** questions in order: age, height_cm, weight_kg, chief_complaint, symptoms, duration, severity, medical_history, medications, medication_history, food_allergies, allergies, confirm. Current medications are labeled «داروهایی که مصرف می‌کنید». The existing allergies field keeps prior data and covers drug/other allergies; food_allergies is separate. No clinical interpretation, BMI, new catalogs, folders or dependencies.
+- **API contract:** existing routes and authorization stay unchanged. Collected intake, patient history, bounded provider context and accepted-doctor detail/history gain the six new fields. Pending-doctor previews remain unchanged.
+- **Validation:** height in centimeters and weight in kilograms accept positive finite decimal numbers (Persian/Arabic digits and decimal separator included). These are input-format checks, not clinical plausibility checks. All new text answers must be non-empty; «ندارد»/«هیچ» is accepted for histories/allergies. Invalid answers re-ask without saving. Existing 2000-character message bound remains.
+- **Agent behavior:** fixed Persian questions; unchanged confirmation/reset behavior. The existing starter red-flag list also checks the new chief complaint before saving, with the same emergency message and redacted transcript behavior. Returning profile confirmation includes all reusable demographic/history fields; an older profile missing the new fields starts a full intake instead of skipping them.
+- **Failure behavior:** reuse existing errors. Symptom/medicine editors support add/remove, custom text, case-insensitive deduplication, an exclusive none choice, total length limits and Reset cleanup.
+- **Access and data handling:** synthetic data only, existing cookie ownership and accepting-doctor access rules. Atomic SQLite version-4 migration adds nullable columns without deleting old records; historical fields remain null where never answered. No new logging.
+- **Configuration:** no new settings.
+- **Acceptance examples:** ۳۰ → ۱۷۰٫۵ → ۷۰٫۲ → synthetic complaint → سرفه، تب → duration/severity → histories/current medicines/allergies → بله; symptoms match both cough and fever. Zero, negative, NaN and infinity do not advance measurements; a complaint red flag stores none of that answer.
+- **Runnable check:** .\.venv\Scripts\python.exe -m unittest discover tests; state-machine/API/history/context/migration tests and browser checks for symptom multi-selection, custom answers, removal, reset and mobile layout.
+
+### Feature: Doctor-only optional context and inline final review
+
+- **Status:** implemented (approved by the user's optional-context and inline-card request).
+- **User outcome:** add optional personal context for the accepting doctor, review grouped answers in the chat, correct one answer without repeating intake, then explicitly confirm.
+- **Scope:** add additional_context after allergies and before confirm for new/returning visits. Persian multiline box, optional skip, 2000-character limit. No clinical interpretation of the note. An RTL inline review card groups demographics, complaint/symptoms, history/medicines, allergies and the note; no modal. The question is «اطلاعات ثبت‌شده رو بررسی کردید؟ همه موارد درسته؟» with primary «بله، تأیید می‌کنم» and secondary «ویرایش اطلاعات». Selecting a field reuses its normal controls; save returns to review, cancel leaves data unchanged. Confirmation collapses the card to a confirmed summary and continues existing triage.
+- **API contract:** existing message route/body remains compatible, with optional edit_field restricted to collected answer names. Editing is allowed only at unfinished confirm; invalid field/body -> 422, invalid answer -> safe 422, wrong stage/completed -> 409; ownership remains 404. Valid edits preserve all other answers, recompute matching and return confirm. Existing red-flag handling applies to corrected complaint/symptoms. Completed normal messages remain immutable. No new endpoint.
+- **Validation:** existing answer validation is reused; the optional note accepts blank/«رد کردن»/skip as no note. No edits to profile/confirm/unknown fields. No note prefilling into a new visit.
+- **Agent behavior:** explicit final confirmation remains required after any edit. Negative text confirmation still resets for existing API clients.
+- **Failure behavior:** show safe Persian inline errors, keep draft corrections, disable duplicate actions while pending and offer retry. Notes are rendered with textContent, never interpreted as HTML.
+- **Access and data handling:** schema v5 atomically adds nullable additional_context without deleting existing data. The patient's own review/history and accepting doctor current/prior visit details can show it; pending/other doctors cannot. Provider context uses an explicit field allowlist excluding the note from both current and previous visits, transcripts and identifiers; only doctor views opt in to notes. No new logging, dependencies or folders.
+- **Configuration:** unchanged.
+- **Acceptance examples:** fill/skip note -> grouped review; edit age -> one field changes and review returns; edit medicines -> matches update; confirm -> compact success then triage. A unique note marker appears for the accepting doctor but never in the serialized provider request, including subsequent visits.
+- **Runnable check:** .\.venv\Scripts\python.exe -m unittest discover tests; note persistence/privacy, field correction/ownership/validation/terminal/concurrency and migration checks, plus RTL desktop/mobile browser verification.
+
+### Feature: Height and weight dropdown choices
+
+- **Status:** implemented (approved by the user's dropdown request).
+- **User outcome:** select height or weight instead of typing, including when correcting final-review answers.
+- **Scope:** reuse the existing Persian native dropdown: heights 30–250 cm in 1-cm steps and weights 1–300 kg in 1-kg steps, each followed by the custom-answer option. No preselection or automatic submission. Exact decimals and values outside these convenience lists remain editable.
+- **API contract:** unchanged; submit the selected numeric text through the existing message/edit flow.
+- **Validation:** unchanged positive finite decimal validation; dropdown ranges are convenience choices, not validation bounds.
+- **Agent behavior:** existing questions, state transitions, corrections and note privacy stay unchanged.
+- **Failure behavior:** reuse current loading, disabled and inline error behavior.
+- **Access and data handling:** existing ownership and synthetic-only rules.
+- **Configuration:** no new settings, folders or dependencies.
+- **Acceptance examples:** select ۱۷۰ cm and ۷۰ kg; custom ۱۷۰٫۵ and ۷۰٫۲ still work; final-review measurement edits offer the same choices.
+- **Runnable check:** existing intake/API tests and browser selection/custom-entry/correction checks.
+- **Verification (2026-10-26):** .\.venv\Scripts\python.exe -m unittest discover tests -p test_intake.py passed 12 tests; the same command with -p test_chat_api.py passed 13 tests. Browser checks confirmed 221 height choices (30–250) and 300 weight choices (1–300), plus placeholder/custom options; selection requires explicit submission, and custom 170.5/70.2 corrections persist. No browser console errors; git diff --check passed. No new backend behavior, dependencies, folders, commits or pushes.
 
 ## 6. Coding and verification rules
 
@@ -586,3 +633,27 @@ Stop after Slice 4.
 - `tests/test_persistence.py`
 - `tests/test_triage.py`
 - `tests/test_visits.py`
+
+## 17. Expanded Persian intake verification (2026-10-26)
+
+- [x] Added height_cm, weight_kg, chief_complaint, medical_history, medication_history and food_allergies across intake, persistence, patient history, bounded context and accepting-doctor current/previous details.
+- [x] Reused the medicine editor for multiple symptoms and updated Persian questions/labels, profile confirmation and doctor display.
+- [x] Added atomic schema-v4 migration and checks for concurrent upgrades, preserved accounts/history, missing legacy profile fields and rollback/retry after a migration failure.
+- [x] Kept pending-doctor previews unchanged and reused redaction for chief-complaint red flags.
+- Command: .\.venv\Scripts\python.exe -m unittest discover tests. Baseline: Ran 115 tests in 82.316s; OK. Final: Ran 120 tests in 81.382s; OK. The original sandboxed Python run stalled after a Python-location warning and was stopped; these passing runs used the repository virtual environment outside the sandbox. The existing Starlette/httpx deprecation warning remains.
+- Started .\.venv\Scripts\python.exe -m uvicorn app.main:app --app-dir src --port 8001 using a separate temporary synthetic database and no configured provider. No existing database was opened or reset for verification.
+- Browser walkthrough completed the expanded Persian intake with height/weight, separate complaint/histories/allergies and two selected symptoms/medicines. Checked custom additions, removal, deduplication, none replacing other selections, total-length rejection retaining selections, Reset cleanup and returning-profile confirmation. No browser console errors; widths 320/375/414/768 had no horizontal overflow. Screenshot inspected.
+- Provider calls in the suite were mocked; no live provider was tested. Doctor projections and previous-visit fields were checked through API tests. No new folders/dependencies, commits or pushes.
+
+## 18. Optional context and final-review verification (2026-10-26)
+
+- [x] Add optional per-visit additional_context after allergies, including returning visits; blank/skip remains empty and old notes are not prefilled.
+- [x] Persist schema-v5 notes through an atomic additive upgrade from v3/v4, preserving existing accounts/history with rollback/retry on failure.
+- [x] Use an explicit provider field allowlist; a mocked full provider-request test proves both current and previous note markers/field names are absent. Only accepting-doctor detail/history opts in to full notes; queues remain unchanged.
+- [x] Add optional edit_field to the existing message route, validate with the same state machine, preserve other fields, refresh matches and serialize concurrent corrections. Reject invalid/unauthorized/late edits without writing data; retain emergency redaction on corrected complaint/symptoms.
+- [x] Render a Persian RTL inline grouped card with native long-text disclosure, a collapsible earlier transcript, field-specific editing/cancel, safe inline errors, pending controls and a compact confirmed summary. No modal, CDN, new dependency or folder.
+- .\.venv\Scripts\python.exe -m unittest discover tests: Ran 127 tests in 69.788s; OK. The existing Starlette/httpx deprecation warning remains. The prior expanded-intake suite had 120 passing tests; seven additional checks cover optional notes, corrections, provider privacy, migration and concurrent edits.
+- Restarted the review server using a new temporary synthetic database and .\.venv\Scripts\python.exe -m uvicorn app.main:app --app-dir src --port 8001. Existing databases were not opened or reset for this verification.
+- Browser automation verified the optional multiline box, skip, fresh note on a returning visit, grouped summary, editing/cancellation, invalid-answer recovery, symptom-match updates, inert HTML-like text, expandable long notes, confirmed-card collapse and continuing fallback triage. Checked widths 320/375/414/768: no horizontal overflow or clipped button labels; no browser console errors. Screenshot inspected and saved outside the repo.
+- Reused the existing palette/type/spacing through Hallmark at component scope. Text contrast on white: primary/secondary 7.68:1, body 12.08:1, muted 5.69:1, error 7.60:1. No decorative motion added.
+- git diff --check passed. Real provider calls were not made; provider payload exclusion was verified through mocks. No commit or push.

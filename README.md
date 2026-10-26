@@ -14,10 +14,12 @@ python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -e .
 ```
 
-For this breaking demo update, stop the server and delete the old disposable
+For databases from the old anonymous demo only, stop the server and delete the old disposable
 synthetic database once, or select a fresh APP_DB_PATH. Old anonymous visits
 have no account ownership and are not migrated into accounts. Keep any data
 you need before resetting. The application never deletes the database for you.
+Existing Slice 4 (schema-v3) and expanded-intake (schema-v4) databases upgrade automatically to schema v5;
+keep those databases when updating the intake questions.
 
 ```powershell
 # Run once only for the old disposable demo database, with the server stopped:
@@ -62,16 +64,44 @@ Queue entries contain only age, symptoms, duration and severity previews.
 The accepting doctor alone gets full structured intake, prior visits and the
 doctor-only AI box with its generated/unverified/clinician-review notice.
 
-Patient intake steps remain age, symptoms, duration, severity, medications,
-allergies and confirmation. Returning patients may confirm their last completed
-non-emergency profile. Persian/Arabic-Indic digits and English/Persian yes/no
-are accepted. Age is 0-120; severity 1-10. Invalid answers re-ask the step.
+Patient intake asks age, height (centimeters), weight (kilograms), main complaint,
+symptoms, duration, severity, disease history, current medicines, past medication
+use, food allergies, drug/other allergies, optional context for the doctor and
+confirmation, in that order.
+Current medicines are labeled «داروهایی که مصرف می‌کنید» and remain distinct
+from «سابقه مصرف دارو». Heights/weights accept positive finite decimal numbers,
+including Persian/Arabic-Indic digits and the Persian decimal separator (٫).
+Persian dropdowns offer heights 30–250 cm and weights 1–300 kg in whole-unit
+steps, in both intake and final-review edits. The custom-answer option keeps
+exact decimals and other positive finite values available; the lists do not
+change validation bounds.
+These checks validate input format; no clinical plausibility or BMI calculation
+is performed. Age is 0-120; severity 1-10. New text questions require non-empty
+answers; histories/allergies accept «هیچ»/«ندارد». Invalid answers re-ask the step.
+Returning patients can confirm their last complete non-emergency profile,
+including height, weight, histories and allergies, then answer a new complaint
+and symptoms. Profiles missing new fields start a full intake instead.
 Negative final confirmation clears the intake; completed states do not change.
 
-The Persian dropdowns load starter symptom/medicine names. Medication answers
-support an editable multi-item list with custom entries, removal, deduplication
+The final optional multiline box accepts up to 2000 characters and can be
+skipped. Its additional_context value is available in the patient's own
+review/history and only the accepting doctor's current/prior visit details.
+It is never sent to the model: the provider context uses an explicit allowlist
+for both current and previous visits, without notes or transcripts. A new visit
+asks for a fresh note; returning-profile confirmation does not copy old notes.
+
+Final confirmation uses a Persian inline card in the chat, grouped into personal
+details, complaint/symptoms, history/medicines, allergies and doctor-only context.
+Long answers expand on demand; earlier chat remains available in a disclosure.
+«ویرایش اطلاعات» reveals field-specific controls. Save validates one correction
+and returns to review without changing other answers; cancel discards the draft.
+«بله، تأیید می‌کنم» turns the card into a compact confirmed summary and continues
+triage. No modal is used. Edits are disabled after completion.
+
+The Persian dropdowns load starter symptom/medicine names. Both symptom and
+current-medicine answers support an editable multi-item list with custom entries, removal, deduplication
 and an exclusive none choice. Vocabulary matches appear as plain chips.
-A fixed Persian/English red-flag list can stop symptoms collection and show
+A fixed Persian/English red-flag list can stop complaint or symptoms collection and show
 the fixed emergency notice without saving the triggering text. This starter
 list is not clinically reviewed and is not a clinical assessment.
 
@@ -133,6 +163,10 @@ Any logged-in role:
 Patient role:
 - POST /v1/chat/sessions has no body and returns 201.
 - POST /v1/chat/sessions/{session_id}/messages accepts {message: str}, length 1-2000.
+  Optional edit_field names one collected field and is allowed only at unfinished
+  final review. Invalid field/answer is 422; wrong stage/completed is 409. A valid
+  correction returns to confirm and updates vocabulary matches. Blank/«رد کردن»/skip
+  skips the optional note; the HTTP message itself must still have at least one character.
 - POST /v1/chat/sessions/{session_id}/triage -> 200.
 - GET /v1/me/history?limit=10 (1-50); DELETE /v1/me -> 204.
 - POST /v1/visit-requests {session_id} -> 201; GET /v1/visit-requests -> own newest-first items.
@@ -198,16 +232,21 @@ $env:APP_LLM_TIMEOUT_SECONDS = "30"
 
 The provider receives current structured intake plus up to three previous
 completed non-emergency visits, dates, matched names and prior specialty.
-Text is capped at 500 characters; identifiers and transcripts are excluded.
+Text is capped at 500 characters; identifiers, transcripts and additional_context
+are excluded. The accepting doctor's note projection retains the full note.
 Doctor-only AI summary/considerations are never in patient triage responses.
 
 ## Storage, vocabulary and demo limits
 
-SQLite schema version 3 adds users, doctors, auth_sessions and visit_requests.
-Connections enable foreign keys and secure_delete; schema initialization runs
-only below version 3. Connections close explicitly; message and acceptance
-transactions are short. No migrations framework exists; add real migrations
-before the first column change. SQLite files/journals are ignored by Git.
+SQLite schema version 5 keeps the version-3 accounts/doctor/request tables,
+the six expanded-intake columns and a nullable additional_context column through
+atomic, version-gated additive migrations.
+Existing accounts, visits and messages are preserved; previously unanswered
+fields remain null. This upgrade does not require deleting a version-3 or version-4 database.
+Connections enable foreign keys and secure_delete; normal version-5 connections
+skip schema writes. Connections close explicitly; message and acceptance
+transactions are short. Explicit SQLite migrations cover these additions; use dedicated
+migration tooling when migrations grow. SQLite files/journals are ignored by Git.
 
 Passwords use salted scrypt (n=16384, r=8, p=1), constant-time digest comparison
 and dummy verification for unknown users. Tokens use secrets.token_urlsafe(32);
@@ -226,7 +265,7 @@ NOT implemented: admin approval of doctors, doctor credential checks, doctor
 account deletion, ratings/reviews, password reset, email verification, MFA,
 audit log, general rate limiting, HTTPS enforcement, direct chat, prescriptions
 or appointment scheduling. Retention is manual deletion only. Expired auth
-sessions are rejected; no scheduled token cleanup, backup or migration system
+sessions are rejected; no scheduled token cleanup, backup or general migration framework
 is provided. Never commit real secrets. Usernames, passwords, tokens, cookies,
 request bodies and headers are not logged; Uvicorn access logs stay disabled.
 

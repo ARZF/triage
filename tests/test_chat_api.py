@@ -11,7 +11,7 @@ from contextlib import closing
 
 from app.core.db import connect
 from app.main import app
-from helpers import as_patient, patient_of, register_patient
+from helpers import as_patient, intake_answers, patient_of, register_patient
 from app.schemas.common import ErrorResponse
 
 
@@ -45,13 +45,13 @@ class ChatApiTests(unittest.TestCase):
         self.assertFalse(state["emergency"])
         self.assertIn("داده‌های ساختگی", state["reply"])
         self.assertEqual(state["collected"], dict.fromkeys(
-            ("age", "symptoms", "duration", "severity", "medications", "allergies")
+            ("age", "height_cm", "weight_kg", "chief_complaint", "symptoms", "duration", "severity", "medical_history", "medications", "medication_history", "food_allergies", "allergies", "additional_context")
         ))
 
     def test_full_flow_and_completed_state_is_unchanged(self):
         state = self.create()
         session_id = state["session_id"]
-        for answer in ("30", "mild cough", "two days", "3", "none", "no", "yes"):
+        for answer in intake_answers(symptoms="mild cough", allergies="no"):
             response = self.message(session_id, answer)
             self.assertEqual(response.status_code, 200)
             state = response.json()
@@ -60,6 +60,9 @@ class ChatApiTests(unittest.TestCase):
         self.assertEqual(state["collected"], {
             "age": 30, "symptoms": "mild cough", "duration": "two days",
             "severity": 3, "medications": "none", "allergies": "no",
+            "height_cm": 170.5, "weight_kg": 70.2, "chief_complaint": "synthetic complaint",
+            "medical_history": "none", "medication_history": "none", "food_allergies": "none",
+            "additional_context": "",
         })
         self.assertEqual(self.message(session_id, "no").json(), state)
 
@@ -69,14 +72,15 @@ class ChatApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["step"], "age")
         self.assertIsNone(response.json()["collected"]["age"])
-        for answer in ("30", "mild cough", "two days", "3", "none", "none", "no"):
+        for answer in intake_answers(symptoms="mild cough", confirm="no"):
             state = self.message(session_id, answer).json()
         self.assertEqual(state["step"], "age")
         self.assertTrue(all(value is None for value in state["collected"].values()))
 
     def test_red_flag_is_not_collected_and_is_terminal(self):
         session_id = self.create()["session_id"]
-        self.message(session_id, "30")
+        for answer in intake_answers()[:4]:
+            self.message(session_id, answer)
         response = self.message(session_id, "Synthetic CHEST PAIN")
         self.assertEqual(response.status_code, 200)
         state = response.json()
@@ -135,7 +139,7 @@ class ChatApiTests(unittest.TestCase):
     def test_full_persian_flow(self):
         state = self.create()
         session_id = state["session_id"]
-        for answer in ("۳۰", "سرفه خفیف", "دو روز", "۳", "هیچ", "ندارد", "بله"):
+        for answer in intake_answers("۳۰", "سرفه خفیف", "دو روز", "۳", "هیچ", "ندارد", "بله"):
             response = self.message(session_id, answer)
             self.assertEqual(response.status_code, 200)
             state = response.json()
@@ -144,12 +148,15 @@ class ChatApiTests(unittest.TestCase):
         self.assertEqual(state["collected"], {
             "age": 30, "symptoms": "سرفه خفیف", "duration": "دو روز",
             "severity": 3, "medications": "هیچ", "allergies": "ندارد",
+            "height_cm": 170.5, "weight_kg": 70.2, "chief_complaint": "synthetic complaint",
+            "medical_history": "none", "medication_history": "none", "food_allergies": "none",
+            "additional_context": "",
         })
         self.assertIn("پایان", state["reply"])
 
     def test_dropdown_answer_values_complete_intake(self):
         session_id = self.create()["session_id"]
-        for answer in ("۳۰", "سرفه خفیف", "دو تا سه روز", "۳", "هیچ", "ندارد", "بله"):
+        for answer in intake_answers("۳۰", "سرفه خفیف", "دو تا سه روز", "۳", "هیچ", "ندارد", "بله"):
             response = self.message(session_id, answer)
             self.assertEqual(response.status_code, 200)
             state = response.json()
@@ -158,4 +165,73 @@ class ChatApiTests(unittest.TestCase):
         self.assertEqual(state["collected"], {
             "age": 30, "symptoms": "سرفه خفیف", "duration": "دو تا سه روز",
             "severity": 3, "medications": "هیچ", "allergies": "ندارد",
+            "height_cm": 170.5, "weight_kg": 70.2, "chief_complaint": "synthetic complaint",
+            "medical_history": "none", "medication_history": "none", "food_allergies": "none",
+            "additional_context": "",
         })
+
+    def review(self):
+        state = self.create()
+        for answer in intake_answers(additional_context="doctor-only synthetic note")[:-1]:
+            state = self.message(state["session_id"], answer).json()
+        self.assertEqual(state["step"], "confirm")
+        self.assertFalse(state["done"])
+        return state
+
+    def test_edit_each_answer_preserves_others_and_requires_confirmation(self):
+        state = self.review()
+        changes = {
+            "age": ("۳۵", 35), "height_cm": ("۱۸۰٫۵", 180.5), "weight_kg": ("۸۰", 80.0),
+            "chief_complaint": ("updated synthetic complaint", "updated synthetic complaint"),
+            "symptoms": ("تب", "تب"), "duration": ("three days", "three days"), "severity": ("4", 4),
+            "medical_history": ("synthetic history", "synthetic history"), "medications": ("ibuprofen", "ibuprofen"),
+            "medication_history": ("past synthetic medicine", "past synthetic medicine"),
+            "food_allergies": ("synthetic food", "synthetic food"), "allergies": ("synthetic allergy", "synthetic allergy"),
+            "additional_context": ("new note\n<script>inert</script>", "new note\n<script>inert</script>"),
+        }
+        for name, (message, expected) in changes.items():
+            before = dict(state["collected"])
+            response = self.client.post(f"/v1/chat/sessions/{state['session_id']}/messages", json={"message": message, "edit_field": name})
+            self.assertEqual(response.status_code, 200, name)
+            state = response.json()
+            self.assertEqual(state["collected"], {**before, name: expected})
+            self.assertEqual(state["step"], "confirm")
+            self.assertFalse(state["done"])
+        self.assertEqual([entry["code"] for entry in state["matched"]["symptoms"]], ["fever"])
+        self.assertEqual([entry["code"] for entry in state["matched"]["medicines"]], ["ibuprofen"])
+        self.assertEqual(self.client.get("/v1/me/history").json()[0]["collected"], state["collected"])
+        state = self.message(state["session_id"], "بله").json()
+        self.assertTrue(state["done"])
+        before = dict(self.stored_session(state["session_id"]))
+        response = self.client.post(f"/v1/chat/sessions/{state['session_id']}/messages", json={"message": "40", "edit_field": "age"})
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(dict(self.stored_session(state["session_id"])), before)
+        self.assertEqual(self.message(state["session_id"], "ignored").json(), state)
+
+    def test_invalid_review_edits_are_private_atomic_and_owned(self):
+        state = self.create()
+        path = f"/v1/chat/sessions/{state['session_id']}/messages"
+        self.assertEqual(self.client.post(path, json={"message": "35", "edit_field": "age"}).status_code, 409)
+        state = self.review()
+        path = f"/v1/chat/sessions/{state['session_id']}/messages"
+        before = self.client.get("/v1/me/history").json()
+        for name, message in (("age", "private-invalid-answer"), ("weight_kg", "-1"), ("symptoms", " "),
+                              ("confirm", "yes"), ("profile", "yes"), ("unknown", "value"), ("additional_context", "x" * 2001)):
+            response = self.client.post(path, json={"message": message, "edit_field": name})
+            self.assertEqual(response.status_code, 422)
+            self.assertNotIn("private-invalid-answer", response.text)
+        self.assertEqual(self.client.get("/v1/me/history").json(), before)
+        register_patient(self.client)
+        self.assertEqual(self.client.post(path, json={"message": "35", "edit_field": "age"}).status_code, 404)
+
+    def test_review_red_flags_still_redact_the_answer(self):
+        for name in ("chief_complaint", "symptoms"):
+            state = self.review()
+            marker = "private_edit_marker CHEST PAIN"
+            response = self.client.post(f"/v1/chat/sessions/{state['session_id']}/messages", json={"message": marker, "edit_field": name})
+            self.assertEqual(response.status_code, 200)
+            result = response.json()
+            self.assertTrue(result["done"])
+            self.assertTrue(result["emergency"])
+            self.assertEqual(result["collected"], state["collected"])
+            self.assertNotIn(marker, self.client.get("/v1/me/history").text)

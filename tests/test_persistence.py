@@ -17,7 +17,7 @@ from app.core import db
 from app.agent import dictionaries, sessions
 from app.core.config import Settings
 from app.main import app
-from helpers import as_patient, patient_of, register_patient
+from helpers import as_patient, intake_answers, patient_of, register_patient
 
 
 class PersistenceTests(unittest.TestCase):
@@ -46,7 +46,7 @@ class PersistenceTests(unittest.TestCase):
         state = self.create(patient_id)
         if state["step"] == "profile":
             state = self.message(state, "no")
-        for answer in (age, "cough", "two days", "3", medications, allergies, "yes"):
+        for answer in intake_answers(age=age, medications=medications, allergies=allergies):
             state = self.message(state, answer)
         self.assertTrue(state["done"])
         return state
@@ -70,13 +70,13 @@ class PersistenceTests(unittest.TestCase):
                 "SELECT role, content, created_at FROM messages WHERE session_id=? ORDER BY id",
                 (state["session_id"],),
             ).fetchall()
-            self.assertEqual([m["role"] for m in messages], ["bot"] + ["user", "bot"] * 7)
+            self.assertEqual([m["role"] for m in messages], ["bot"] + ["user", "bot"] * 14)
             self.assertEqual(messages[1]["content"], "30")
             self.assertEqual(messages[-1]["content"], state["reply"])
             for value in (row["created_at"], row["updated_at"], messages[0]["created_at"]):
                 self.assertEqual(datetime.fromisoformat(value).utcoffset(), timedelta(0))
             self.assertEqual(connection.execute("PRAGMA foreign_keys").fetchone()[0], 1)
-            self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 3)
+            self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 5)
 
     def test_returning_profile_yes_prefills_and_skips_questions(self):
         first = self.complete(allergies="synthetic allergy")
@@ -86,6 +86,9 @@ class PersistenceTests(unittest.TestCase):
         self.assertEqual(state["collected"], {
             "age": 30, "symptoms": None, "duration": None, "severity": None,
             "medications": "paracetamol", "allergies": "synthetic allergy",
+            "height_cm": 170.5, "weight_kg": 70.2, "chief_complaint": None,
+            "medical_history": "none", "medication_history": "none", "food_allergies": "none",
+            "additional_context": None,
         })
         self.assertIn("۳۰", state["reply"])
         self.assertIn("paracetamol", state["reply"])
@@ -94,9 +97,10 @@ class PersistenceTests(unittest.TestCase):
         self.assertEqual(invalid["step"], "profile")
         self.assertEqual(invalid["collected"], state["collected"])
         state = self.message(state, "بله")
-        self.assertEqual(state["step"], "symptoms")
+        self.assertEqual(state["step"], "chief_complaint")
+        state = self.message(state, "another synthetic complaint")
         self.assertEqual(self.row(state["session_id"])["returning_profile"], 1)
-        for answer, step in (("fever", "duration"), ("one day", "severity"), ("4", "confirm")):
+        for answer, step in (("fever", "duration"), ("one day", "severity"), ("4", "additional_context"), ("رد کردن", "confirm")):
             state = self.message(state, answer)
             self.assertEqual(state["step"], step)
         state = self.message(state, "yes")
@@ -112,8 +116,8 @@ class PersistenceTests(unittest.TestCase):
         self.assertTrue(all(value is None for value in state["collected"].values()))
         self.assertEqual(self.row(state["session_id"])["returning_profile"], 0)
         for answer, next_step in zip(
-            ("45", "cough", "two days", "4", "ibuprofen", "none", "yes"),
-            ("symptoms", "duration", "severity", "medications", "allergies", "confirm", "confirm"),
+            intake_answers(age="45", severity="4", medications="ibuprofen"),
+            ("height_cm", "weight_kg", "chief_complaint", "symptoms", "duration", "severity", "medical_history", "medications", "medication_history", "food_allergies", "allergies", "additional_context", "confirm", "confirm"),
         ):
             state = self.message(state, answer)
             self.assertEqual(state["step"], next_step)
@@ -130,6 +134,8 @@ class PersistenceTests(unittest.TestCase):
                 state = self.create()
                 state = self.message(state, "30")
                 if emergency:
+                    for answer in ("170.5", "70.2", "synthetic complaint"):
+                        state = self.message(state, answer)
                     state = self.message(state, "CHEST PAIN")
                     self.assertTrue(state["emergency"])
                 new = self.create(patient_of(state))
@@ -138,7 +144,9 @@ class PersistenceTests(unittest.TestCase):
                 self.assertTrue(all(value is None for value in new["collected"].values()))
 
     def test_red_flag_text_is_absent_from_every_table(self):
-        state = self.message(self.create(), "30")
+        state = self.create()
+        for answer in intake_answers()[:4]:
+            state = self.message(state, answer)
         original = "unique_redaction_marker CHEST PAIN"
         state = self.message(state, original)
         self.assertTrue(state["done"])
@@ -294,7 +302,7 @@ class PersistenceTests(unittest.TestCase):
         state = self.create()
         with ThreadPoolExecutor(max_workers=2) as pool:
             rows = list(pool.map(lambda _: sessions.send_message(state["session_id"], "30"), range(2)))
-        self.assertEqual({row["step"] for row in rows}, {"symptoms", "duration"})
+        self.assertEqual({row["step"] for row in rows}, {"height_cm", "weight_kg"})
         with closing(db.connect()) as connection:
             self.assertEqual(connection.execute("SELECT COUNT(*) FROM messages").fetchone()[0], 5)
 
@@ -308,3 +316,114 @@ class PersistenceTests(unittest.TestCase):
                 db.connect()
         fresh.unlink()
         self.assertFalse(fresh.exists())
+
+    def test_v3_migration_preserves_records_and_recollects_missing_profile_fields(self):
+        state = self.complete()
+        added = ("height_cm", "weight_kg", "chief_complaint", "medical_history", "medication_history", "food_allergies", "additional_context")
+        with closing(sqlite3.connect(self.db_path)) as connection, connection:
+            counts = {table: connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+                      for table in ("users", "patients", "sessions", "auth_sessions", "messages", "doctors")}
+            for name in added:
+                connection.execute(f"ALTER TABLE sessions DROP COLUMN {name}")
+            connection.execute("PRAGMA user_version=3")
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            def migrate(_):
+                with closing(db.connect()) as connection:
+                    return connection.execute("PRAGMA user_version").fetchone()[0]
+            self.assertEqual(list(pool.map(migrate, range(2))), [5, 5])
+        with closing(db.connect()) as connection:
+            for table, count in counts.items():
+                self.assertEqual(connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0], count)
+            row = connection.execute("SELECT * FROM sessions WHERE id=?", (state["session_id"],)).fetchone()
+            self.assertEqual(row["medications"], "paracetamol")
+            self.assertTrue(all(row[name] is None for name in added))
+        self.assertEqual(self.client.get("/v1/auth/me").status_code, 200)
+        history = self.client.get("/v1/me/history").json()[0]
+        self.assertIsNone(history["collected"]["height_cm"])
+        new = self.create()
+        self.assertTrue(new["returning"])
+        self.assertEqual(new["step"], "age")
+        self.assertTrue(all(value is None for value in new["collected"].values()))
+        self.assertEqual(new["matched"]["medicines"], [])
+
+    def test_failed_column_migration_rolls_back_and_can_retry(self):
+        path = self.db_path.with_name("migration-failure.db")
+        with closing(sqlite3.connect(path)) as connection:
+            connection.executescript(db.SCHEMA)
+        original = sqlite3.connect
+        class FailingConnection(sqlite3.Connection):
+            def execute(self, sql, *args):
+                if sql.startswith("ALTER TABLE sessions ADD COLUMN weight_kg"):
+                    raise sqlite3.OperationalError("synthetic migration failure")
+                return super().execute(sql, *args)
+        def connect(*args, **kwargs):
+            return original(*args, **kwargs, factory=FailingConnection)
+        with patch.dict(os.environ, {"APP_DB_PATH": str(path)}):
+            with patch.object(db.sqlite3, "connect", side_effect=connect):
+                with self.assertRaises(sqlite3.OperationalError):
+                    db.connect()
+            with closing(original(path)) as connection:
+                self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 3)
+                self.assertNotIn("height_cm", {row[1] for row in connection.execute("PRAGMA table_info(sessions)")})
+            with closing(db.connect()) as connection:
+                self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 5)
+
+    def test_new_intake_fields_round_trip_in_history_and_complaint_is_redacted(self):
+        state = self.create()
+        answers = ("۳۰", "۱۷۰٫۵", "٧٠.٢", "شکایت ساختگی", "سرفه، تب", "دو روز", "۳",
+                   "بیماری ساختگی", "هیچ", "داروی قبلی ساختگی", "حساسیت غذایی ساختگی", "حساسیت دارویی ساختگی", "توضیح ساختگی برای پزشک", "بله")
+        for answer in answers:
+            state = self.message(state, answer)
+        self.assertTrue(state["done"])
+        history = self.client.get("/v1/me/history").json()[0]
+        self.assertEqual(history["collected"], state["collected"])
+        self.assertEqual(state["collected"]["medical_history"], "بیماری ساختگی")
+        self.assertEqual(state["collected"]["medication_history"], "داروی قبلی ساختگی")
+        self.assertEqual(state["collected"]["food_allergies"], "حساسیت غذایی ساختگی")
+        self.assertEqual(state["collected"]["allergies"], "حساسیت دارویی ساختگی")
+        new = self.create()
+        self.assertEqual(new["step"], "profile")
+        new = self.message(new, "بله")
+        self.assertEqual(new["step"], "chief_complaint")
+        original = "unique_complaint_marker CHEST PAIN"
+        new = self.message(new, original)
+        self.assertTrue(new["emergency"])
+        self.assertIsNone(new["collected"]["chief_complaint"])
+        self.assertNotIn(original, json.dumps(self.client.get("/v1/me/history").json()))
+
+    def test_v4_note_migration_preserves_data_and_rolls_back_failure(self):
+        state = self.complete()
+        with closing(sqlite3.connect(self.db_path)) as connection, connection:
+            connection.execute("ALTER TABLE sessions DROP COLUMN additional_context")
+            connection.execute("PRAGMA user_version=4")
+        original = sqlite3.connect
+        class FailingConnection(sqlite3.Connection):
+            def execute(self, sql, *args):
+                if sql == "PRAGMA user_version=5":
+                    raise sqlite3.OperationalError("synthetic migration failure")
+                return super().execute(sql, *args)
+        with patch.object(db.sqlite3, "connect", side_effect=lambda *args, **kwargs: original(*args, **kwargs, factory=FailingConnection)):
+            with self.assertRaises(sqlite3.OperationalError):
+                db.connect()
+        with closing(original(self.db_path)) as connection:
+            self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 4)
+            self.assertNotIn("additional_context", {row[1] for row in connection.execute("PRAGMA table_info(sessions)")})
+        with closing(db.connect()) as connection:
+            self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 5)
+            row = connection.execute("SELECT * FROM sessions WHERE id=?", (state["session_id"],)).fetchone()
+            self.assertEqual(row["medications"], "paracetamol")
+            self.assertIsNone(row["additional_context"])
+        self.assertEqual(self.client.get("/v1/auth/me").status_code, 200)
+
+    def test_concurrent_review_edits_do_not_lose_other_fields(self):
+        state = self.create()
+        for answer in intake_answers()[:-1]:
+            state = self.message(state, answer)
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            list(pool.map(lambda item: sessions.send_message(state["session_id"], item[1], item[0]),
+                          (("age", "40"), ("height_cm", "180"))))
+        row = self.row(state["session_id"])
+        self.assertEqual(row["age"], 40)
+        self.assertEqual(row["height_cm"], 180)
+        self.assertEqual(row["step"], "confirm")
+        self.assertFalse(row["done"])

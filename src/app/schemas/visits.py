@@ -43,8 +43,15 @@ class MatchedNames(BaseModel):
 
 
 class IntakeContext(Preview):
+    height_cm: float | None
+    weight_kg: float | None
+    chief_complaint: str | None
+    medical_history: str | None
     medications: str | None
+    medication_history: str | None
+    food_allergies: str | None
     allergies: str | None
+    additional_context: str | None
     matched: MatchedNames
 
 

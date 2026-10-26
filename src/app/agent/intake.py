@@ -1,18 +1,29 @@
 from dataclasses import dataclass, field, replace
+import math
+import re
 from typing import Literal
 
-Step = Literal["profile", "age", "symptoms", "duration", "severity", "medications", "allergies", "confirm"]
+AnswerField = Literal["age", "height_cm", "weight_kg", "chief_complaint", "symptoms", "duration", "severity", "medical_history", "medications", "medication_history", "food_allergies", "allergies", "additional_context"]
+Step = Literal["profile", "confirm", AnswerField]
 QUESTIONS = {
     "age": "سن بیمار فرضی چند سال است؟ (۰ تا ۱۲۰)",
+    "height_cm": "قد بیمار فرضی چند سانتی‌متر است؟",
+    "weight_kg": "وزن بیمار فرضی چند کیلوگرم است؟",
+    "chief_complaint": "شکایت اصلی بیمار فرضی و دلیل مراجعه چیست؟",
     "symptoms": "بیمار فرضی چه علائمی دارد؟",
     "duration": "این علائم از چه زمانی شروع شده‌اند؟",
     "severity": "شدت علائم از ۱ تا ۱۰ چقدر است؟",
-    "medications": "بیمار فرضی چه داروهایی مصرف می‌کند؟ اگر دارویی مصرف نمی‌کند، بنویسید «هیچ».",
-    "allergies": "بیمار فرضی چه حساسیت‌هایی دارد؟ اگر حساسیتی ندارد، بنویسید «ندارد».",
-    "confirm": "آیا اطلاعات درست است؟ برای پایان «بله» و برای شروع دوباره «خیر» بنویسید.",
+    "medical_history": "بیمار فرضی چه سابقهٔ بیماری دارد؟ اگر ندارد، بنویسید «ندارد».",
+    "medications": "داروهایی که مصرف می‌کنید را برای بیمار فرضی وارد کنید. اگر دارویی مصرف نمی‌کند، بنویسید «هیچ».",
+    "medication_history": "سابقهٔ مصرف داروی بیمار فرضی چیست؟ داروهای قبلی را بنویسید؛ اگر ندارد، بنویسید «ندارد».",
+    "food_allergies": "بیمار فرضی چه حساسیت غذایی دارد؟ اگر ندارد، بنویسید «ندارد».",
+    "allergies": "بیمار فرضی چه حساسیت دارویی یا سایر حساسیت‌هایی دارد؟ اگر ندارد، بنویسید «ندارد».",
+    "additional_context": "آیا توضیح دیگری دربارهٔ خودتان دارید که پزشک بداند؟ نوشتن این بخش اختیاری است و برای هوش مصنوعی ارسال نمی‌شود. اگر توضیحی ندارید، «رد کردن» را بزنید.",
+    "confirm": "اطلاعات ثبت‌شده رو بررسی کردید؟ همه موارد درسته؟",
 }
 STEPS = tuple(QUESTIONS)
-QUESTIONS["profile"] = "آیا سن، داروها و حساسیت‌های قبلی همچنان درست هستند؟ «بله» یا «خیر» بنویسید."
+QUESTIONS["profile"] = "آیا سن، قد، وزن، سوابق، داروها و حساسیت‌های قبلی همچنان درست هستند؟ «بله» یا «خیر» بنویسید."
+PROFILE_FIELDS = ("age", "height_cm", "weight_kg", "medical_history", "medications", "medication_history", "food_allergies", "allergies")
 WELCOME = "خوش آمدید! این یک نسخهٔ نمایشی است؛ فقط از داده‌های ساختگی استفاده کنید. نام یا اطلاعات شناسایی وارد نکنید."
 EMERGENCY_REPLY = "لطفاً همین حالا با خدمات اورژانس محل خود تماس بگیرید. این نسخهٔ نمایشی نمی‌تواند کمک اضطراری ارائه کند."
 COMPLETE_REPLY = "ثبت اطلاعات ساختگی به پایان رسید. این نسخهٔ نمایشی تشخیص یا توصیهٔ درمانی ارائه نمی‌کند."
@@ -30,11 +41,18 @@ TEXT_NORMALIZATION = str.maketrans({"ي": "ی", "ك": "ک", "\u200c": " "})
 @dataclass(frozen=True)
 class Collected:
     age: int | None = None
+    height_cm: float | None = None
+    weight_kg: float | None = None
+    chief_complaint: str | None = None
     symptoms: str | None = None
     duration: str | None = None
     severity: int | None = None
+    medical_history: str | None = None
     medications: str | None = None
+    medication_history: str | None = None
+    food_allergies: str | None = None
     allergies: str | None = None
+    additional_context: str | None = None
 
 
 @dataclass(frozen=True)
@@ -48,12 +66,10 @@ class IntakeState:
 
 
 def profile_state(prefill: Collected) -> IntakeState:
-    age = str(prefill.age).translate(str.maketrans("0123456789", "۰۱۲۳۴۵۶۷۸۹"))
-    reply = (
-        f"خوش آمدید! اطلاعات قبلی شما در این نسخهٔ نمایشی: سن {age} سال؛ "
-        f"داروها: {prefill.medications}؛ حساسیت‌ها: {prefill.allergies}. "
-        + QUESTIONS["profile"]
-    )
+    labels = ("سن", "قد (سانتی‌متر)", "وزن (کیلوگرم)", "سابقه بیماری", "داروهایی که مصرف می‌کنید", "سابقه مصرف دارو", "حساسیت غذایی", "حساسیت دارویی / سایر حساسیت‌ها")
+    details = "؛ ".join(f"{label}: {getattr(prefill, name)}" for name, label in zip(PROFILE_FIELDS, labels))
+    details = details.translate(str.maketrans("0123456789", "۰۱۲۳۴۵۶۷۸۹"))
+    reply = "خوش آمدید! اطلاعات قبلی شما در این نسخهٔ نمایشی: " + details + ". " + QUESTIONS["profile"]
     return IntakeState(step="profile", collected=prefill, reply=reply)
 
 
@@ -65,7 +81,7 @@ def advance(state: IntakeState, message: str) -> tuple[IntakeState, str]:
     normalized = answer.casefold().translate(TEXT_NORMALIZATION)
     step = state.step
     hint = ""
-    value: str | int = answer
+    value: str | int | float = answer
 
     if step in ("age", "severity"):
         lower, upper = (0, 120) if step == "age" else (1, 10)
@@ -73,9 +89,18 @@ def advance(state: IntakeState, message: str) -> tuple[IntakeState, str]:
             value = int(answer)
         else:
             hint = "عدد صحیح بین ۰ تا ۱۲۰ وارد کنید." if step == "age" else "عدد صحیح بین ۱ تا ۱۰ وارد کنید."
+    elif step in ("height_cm", "weight_kg"):
+        if re.fullmatch(r"(?:\d+(?:[.٫]\d+)?|[.٫]\d+)", answer):
+            value = float(answer.replace("٫", "."))
+            if not math.isfinite(value) or value <= 0:
+                hint = "عدد مثبت و محدود وارد کنید."
+        else:
+            hint = "عدد مثبت وارد کنید؛ برای اعشار از نقطه یا «٫» استفاده کنید."
     elif step in ("confirm", "profile"):
         if normalized not in ("yes", "no", "بله", "خیر", "نه"):
             hint = "لطفاً «بله» یا «خیر» بنویسید."
+    elif step == "additional_context":
+        value = "" if not answer or normalized in ("skip", "رد کردن") else answer
     elif not answer:
         hint = "لطفاً پاسخ را خالی نگذارید."
 
@@ -83,10 +108,10 @@ def advance(state: IntakeState, message: str) -> tuple[IntakeState, str]:
         updated = replace(state, reply=hint + " " + QUESTIONS[step])
     elif step == "profile":
         updated = (
-            replace(state, step="symptoms", returning_profile=True, reply=QUESTIONS["symptoms"])
+            replace(state, step="chief_complaint", returning_profile=True, reply=QUESTIONS["chief_complaint"])
             if normalized in ("yes", "بله") else IntakeState()
         )
-    elif step == "symptoms" and any(phrase in normalized for phrase in RED_FLAGS):
+    elif step in ("chief_complaint", "symptoms") and any(phrase in normalized for phrase in RED_FLAGS):
         updated = replace(state, done=True, emergency=True, reply=EMERGENCY_REPLY)
     elif step == "confirm":
         updated = (
@@ -95,7 +120,7 @@ def advance(state: IntakeState, message: str) -> tuple[IntakeState, str]:
             else IntakeState(reply="دوباره شروع می‌کنیم. " + QUESTIONS["age"])
         )
     else:
-        next_step = "confirm" if state.returning_profile and step == "severity" else STEPS[STEPS.index(step) + 1]
+        next_step = "additional_context" if state.returning_profile and step == "severity" else STEPS[STEPS.index(step) + 1]
         updated = replace(
             state,
             step=next_step,

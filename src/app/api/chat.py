@@ -25,10 +25,10 @@ def create_chat_session(user: dict = Depends(patient_user)) -> ChatResponse:
     return _response(sessions.create_session(user["patient_id"]))
 
 
-@router.post("/sessions/{session_id}/messages", response_model=ChatResponse, responses={404: {"model": ErrorResponse}, 422: {"model": ErrorResponse}})
+@router.post("/sessions/{session_id}/messages", response_model=ChatResponse, responses={404: {"model": ErrorResponse}, 409: {"model": ErrorResponse}, 422: {"model": ErrorResponse}})
 def chat_message(session_id: str, body: MessageRequest, user: dict = Depends(owned_session)) -> ChatResponse:
     try:
-        return _response(sessions.send_message(session_id, body.message))
+        return _response(sessions.send_message(session_id, body.message, body.edit_field))
     except KeyError:
         raise HTTPException(status_code=404) from None
 

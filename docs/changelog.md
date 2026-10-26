@@ -11,6 +11,14 @@ move them into a dated version section when a release is made.
 
 ### Added
 
+- Persian height/weight dropdown choices in intake and final-review corrections, retaining custom decimal entry.
+
+- Optional multiline context for the accepting doctor, persisted through schema v5 and excluded from all current/prior provider inputs through an explicit allowlist.
+- Persian RTL inline final-review card with grouped answers, expandable long text, per-field corrections/cancellation, pending/error states and a compact confirmed summary before triage.
+
+- Persian intake questions for height (cm), weight (kg), main complaint, disease history, past medication use and food allergies, with separate drug/other allergy wording and positive decimal measurement validation.
+- Atomic SQLite v3-to-v4 migration preserving existing records, expanded history/provider/accepting-doctor data and migration rollback/legacy-profile checks.
+
 - Slice 4: demo-grade patient/doctor self-registration, scrypt passwords, hashed cookie sessions, login throttle, role/verification/ownership dependencies and no-store API responses.
 - Database-backed seeded/self-registered doctors, polling presence, public specialties, Persian login and doctor dashboard.
 - Broadcast visit requests with expiry/cancellation, a partial active-request index, atomic first acceptance and accepted-doctor-only intake/history/AI projections.
@@ -60,6 +68,11 @@ move them into a dated version section when a release is made.
 - Doctors now come from schema-v3 SQLite rows; doctors.json is seed data without online fields, online presence is computed and scores may be null. Reset the old disposable synthetic database once.
 
 ### Changed
+
+- Allow validated corrections through optional edit_field on the existing message route during final review only; preserve other answers and refresh matches atomically. Completed sessions remain immutable.
+
+- Symptoms now reuse the medicine multi-item editor: default choices, custom entries, removal, deduplication, exclusive none and a shared total length limit.
+- Label current medicines «داروهایی که مصرف می‌کنید»; include new demographic/history fields in returning-profile confirmation and re-collect profiles missing them. Check chief complaints with the existing red-flag list before storing them.
 
 - Gate schema initialization below version 3 and enable secure_delete on every connection.
 - Retain existing intake/triage behavior while applying account ownership; doctor-only AI fields are now visible only through an accepted request.

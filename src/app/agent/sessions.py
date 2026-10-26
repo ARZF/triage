@@ -1,12 +1,13 @@
 import json
 import sqlite3
 from contextlib import closing
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from uuid import uuid4
 
 from app.core import db
+from app.core.errors import ServiceError
 from app.agent import dictionaries
-from app.agent.intake import Collected, IntakeState, advance, profile_state
+from app.agent.intake import PROFILE_FIELDS, QUESTIONS, Collected, IntakeState, advance, profile_state
 
 REDACTED_MESSAGE = "متن این پیام به‌دلیل توقف اضطراری ذخیره نشده است."
 
@@ -55,25 +56,25 @@ def create_session(patient_id: str | None = None) -> sqlite3.Row:
                ORDER BY updated_at DESC, created_at DESC, rowid DESC LIMIT 1""",
             (patient_id,),
         ).fetchone()
-        state = (
-            profile_state(Collected(age=previous["age"], medications=previous["medications"], allergies=previous["allergies"]))
-            if previous is not None else IntakeState()
-        )
+        has_profile = previous is not None and all(previous[name] is not None for name in PROFILE_FIELDS)
+        state = profile_state(Collected(**{name: previous[name] for name in PROFILE_FIELDS})) if has_profile else IntakeState()
         session_id = uuid4().hex
         values = {
             **_values(state), "id": session_id, "patient_id": patient_id,
             "symptom_codes": "[]",
-            "medication_codes": previous["medication_codes"] if previous is not None else "[]",
+            "medication_codes": previous["medication_codes"] if has_profile else "[]",
             "created_at": now, "updated_at": now,
         }
         connection.execute(
             """INSERT INTO sessions(
                 id, patient_id, step, done, emergency, returning_profile,
                 age, symptoms, duration, severity, medications, allergies,
+                height_cm, weight_kg, chief_complaint, medical_history, medication_history, food_allergies, additional_context,
                 symptom_codes, medication_codes, reply, created_at, updated_at
             ) VALUES (
                 :id, :patient_id, :step, :done, :emergency, :returning_profile,
                 :age, :symptoms, :duration, :severity, :medications, :allergies,
+                :height_cm, :weight_kg, :chief_complaint, :medical_history, :medication_history, :food_allergies, :additional_context,
                 :symptom_codes, :medication_codes, :reply, :created_at, :updated_at
             )""",
             values,
@@ -82,14 +83,26 @@ def create_session(patient_id: str | None = None) -> sqlite3.Row:
         return _read(connection, session_id)
 
 
-def send_message(session_id: str, message: str) -> sqlite3.Row:
+def send_message(session_id: str, message: str, edit_field: str | None = None) -> sqlite3.Row:
     with closing(db.connect()) as connection, connection:
         connection.execute("BEGIN IMMEDIATE")
         row = _read(connection, session_id)
         previous = restore(row)
+        if edit_field is not None and (previous.done or previous.step != "confirm"):
+            raise ServiceError(409, "edit_not_allowed", "Answers can only be edited during final review")
         if previous.done:
             return row
-        state, reply = advance(previous, message)
+        if edit_field is None:
+            state, reply = advance(previous, message)
+        else:
+            if edit_field not in Collected.__dataclass_fields__:
+                raise ServiceError(422, "invalid_answer_field", "Invalid answer field")
+            state, reply = advance(replace(previous, step=edit_field, returning_profile=False), message)
+            if state.step == edit_field and not state.done:
+                raise ServiceError(422, "invalid_answer", "Invalid answer")
+            if not state.emergency:
+                state = replace(state, step="confirm", returning_profile=previous.returning_profile, reply=QUESTIONS["confirm"])
+                reply = state.reply
         codes = {"symptom_codes": row["symptom_codes"], "medication_codes": row["medication_codes"]}
         for field, kind, column in (
             ("symptoms", "symptoms", "symptom_codes"),
@@ -104,6 +117,9 @@ def send_message(session_id: str, message: str) -> sqlite3.Row:
                 step=:step, done=:done, emergency=:emergency, returning_profile=:returning_profile,
                 age=:age, symptoms=:symptoms, duration=:duration, severity=:severity,
                 medications=:medications, allergies=:allergies, symptom_codes=:symptom_codes,
+                height_cm=:height_cm, weight_kg=:weight_kg, chief_complaint=:chief_complaint,
+                medical_history=:medical_history, medication_history=:medication_history, food_allergies=:food_allergies,
+                additional_context=:additional_context,
                 medication_codes=:medication_codes, reply=:reply, updated_at=:updated_at
                 WHERE id=:id""",
             {**_values(state), **codes, "updated_at": now, "id": session_id},

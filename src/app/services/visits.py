@@ -95,7 +95,7 @@ def _doctor_item(connection, row, doctor_id: str) -> dict:
     session = connection.execute("SELECT * FROM sessions WHERE id=?", (row["session_id"],)).fetchone()
     triage = connection.execute("SELECT * FROM triage_results WHERE session_id=?", (row["session_id"],)).fetchone()
     accepted = row["status"] == "accepted" and row["doctor_id"] == doctor_id
-    context = build_context(connection, row["session_id"]) if accepted else None
+    context = build_context(connection, row["session_id"], for_doctor=True) if accepted else None
     return {
         "id": row["id"], "status": row["status"], "created_at": row["created_at"],
         "specialty": doctors.specialty(row["specialty_code"]),

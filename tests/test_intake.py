@@ -1,11 +1,12 @@
 import unittest
 from dataclasses import asdict
+from helpers import intake_answers
 
 from app.agent.intake import (
     COMPLETE_REPLY, EMERGENCY_REPLY, QUESTIONS, RED_FLAGS, Collected, IntakeState, advance,
 )
 
-ANSWERS = ("30", "mild cough", "two days", "3", "none", "no")
+ANSWERS = intake_answers(symptoms="mild cough", allergies="no")[:-1]
 
 
 def before_step(step):
@@ -24,7 +25,7 @@ class IntakeTests(unittest.TestCase):
         self.assertIn("داده‌های ساختگی", state.reply)
         self.assertIn(QUESTIONS["age"], state.reply)
         for answer, next_step in zip(
-            ANSWERS, ("symptoms", "duration", "severity", "medications", "allergies", "confirm")
+            ANSWERS, ("height_cm", "weight_kg", "chief_complaint", "symptoms", "duration", "severity", "medical_history", "medications", "medication_history", "food_allergies", "allergies", "additional_context", "confirm")
         ):
             state, reply = advance(state, answer)
             self.assertEqual(state.step, next_step)
@@ -38,12 +39,21 @@ class IntakeTests(unittest.TestCase):
         self.assertEqual(asdict(state.collected), {
             "age": 30, "symptoms": "mild cough", "duration": "two days",
             "severity": 3, "medications": "none", "allergies": "no",
+            "height_cm": 170.5, "weight_kg": 70.2, "chief_complaint": "synthetic complaint",
+            "medical_history": "none", "medication_history": "none", "food_allergies": "none",
+            "additional_context": "",
         })
         self.assertEqual(advance(state, "no"), (state, reply))
 
     def test_every_validation_reasks_without_storing(self):
         invalid = {
             "age": ("", " ", "-1", "121", "abc", "3.5", "1_0"),
+            "height_cm": ("", " ", "0", "-1", "NaN", "inf", "1e3", "1_0", "9" * 500),
+            "weight_kg": ("", " ", "0", "-1", "Infinity", "1e309", "1,5"),
+            "chief_complaint": ("", " "),
+            "medical_history": ("", " "),
+            "medication_history": ("", " "),
+            "food_allergies": ("", " "),
             "symptoms": ("", " "),
             "duration": ("", " "),
             "severity": ("", " ", "0", "11", "abc", "3.5"),
@@ -73,7 +83,7 @@ class IntakeTests(unittest.TestCase):
                 self.assertEqual(state.collected.severity, int(answer))
         state, _ = advance(before_step("symptoms"), "  mild cough  ")
         self.assertEqual(state.collected.symptoms, "mild cough")
-        for step in ("medications", "allergies"):
+        for step in ("medical_history", "medications", "medication_history", "food_allergies", "allergies"):
             for answer in ("none", "no"):
                 with self.subTest(step=step, answer=answer):
                     state, _ = advance(before_step(step), answer)
@@ -143,13 +153,31 @@ class IntakeTests(unittest.TestCase):
         self.assertEqual(invalid.collected, prefill)
         state, _ = advance(initial, "بله")
         self.assertTrue(state.returning_profile)
-        for answer, step in (("cough", "duration"), ("two days", "severity"), ("3", "confirm")):
+        self.assertEqual(state.step, "chief_complaint")
+        state, _ = advance(state, "synthetic complaint")
+        for answer, step in (("cough", "duration"), ("two days", "severity"), ("3", "additional_context"), ("رد کردن", "confirm")):
             state, _ = advance(state, answer)
             self.assertEqual(state.step, step)
         self.assertEqual(state.collected.medications, prefill.medications)
         state, _ = advance(state, "yes")
         self.assertTrue(state.done)
         self.assertEqual(initial.collected, prefill)
+
+    def test_measurements_accept_persian_and_arabic_decimal_numbers(self):
+        for step, answer, expected in (("height_cm", "۱۷۰٫۵", 170.5), ("weight_kg", "٧٠.٢", 70.2), ("weight_kg", ".۵", .5)):
+            with self.subTest(step=step, answer=answer):
+                state, _ = advance(before_step(step), answer)
+                self.assertEqual(getattr(state.collected, step), expected)
+
+    def test_chief_complaint_red_flags_are_not_stored(self):
+        for phrase in RED_FLAGS:
+            initial = before_step("chief_complaint")
+            state, reply = advance(initial, phrase.upper())
+            self.assertEqual(state.collected, initial.collected)
+            self.assertIsNone(state.collected.chief_complaint)
+            self.assertTrue(state.emergency)
+            self.assertTrue(state.done)
+            self.assertEqual(reply, EMERGENCY_REPLY)
 
     def test_profile_rejection_discards_prefill(self):
         from app.agent.intake import profile_state
@@ -159,3 +187,11 @@ class IntakeTests(unittest.TestCase):
             self.assertEqual(state.step, "age")
             self.assertEqual(state.collected, Collected())
             self.assertFalse(state.returning_profile)
+
+    def test_optional_context_can_be_skipped_or_keep_multiline_text(self):
+        for answer in ("", " ", "رد کردن", "skip"):
+            state, _ = advance(before_step("additional_context"), answer)
+            self.assertEqual(state.step, "confirm")
+            self.assertEqual(state.collected.additional_context, "")
+        state, _ = advance(before_step("additional_context"), "  synthetic note\nsecond line <script>  ")
+        self.assertEqual(state.collected.additional_context, "synthetic note\nsecond line <script>")

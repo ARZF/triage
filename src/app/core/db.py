@@ -105,9 +105,19 @@ def connect() -> sqlite3.Connection:
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA foreign_keys=ON")
         connection.execute("PRAGMA secure_delete=ON")
-        # ponytail: no migrations framework; add real migrations before the first column change.
         if connection.execute("PRAGMA user_version").fetchone()[0] < 3:
             connection.executescript(SCHEMA)
+        if connection.execute("PRAGMA user_version").fetchone()[0] < 5:
+            # ponytail: explicit additive SQLite migrations; use versioned migration files/tooling when migrations grow.
+            with connection:
+                connection.execute("BEGIN IMMEDIATE")
+                columns = {row["name"] for row in connection.execute("PRAGMA table_info(sessions)")}
+                for name, kind in (("height_cm", "REAL"), ("weight_kg", "REAL"), ("chief_complaint", "TEXT"),
+                                   ("medical_history", "TEXT"), ("medication_history", "TEXT"), ("food_allergies", "TEXT"),
+                                   ("additional_context", "TEXT")):
+                    if name not in columns:
+                        connection.execute(f"ALTER TABLE sessions ADD COLUMN {name} {kind}")
+                connection.execute("PRAGMA user_version=5")
         return connection
     except BaseException:
         connection.close()

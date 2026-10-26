@@ -14,7 +14,7 @@ from fastapi.testclient import TestClient
 from app.core import db, llm
 from app.main import app
 from app.services import doctors, visits
-from helpers import register_doctor, register_patient
+from helpers import intake_answers, register_doctor, register_patient
 
 BASE = "2030-01-01T00:00:00.000000+00:00"
 
@@ -38,14 +38,14 @@ class VisitTests(unittest.TestCase):
         for client in self.doctor_clients:
             self.assertEqual(client.get("/v1/doctor/requests").status_code, 200)
 
-    def complete(self, triage=True):
+    def complete(self, triage=True, additional_context="رد کردن"):
         response = self.patient.post("/v1/chat/sessions")
         self.assertEqual(response.status_code, 201)
         state = response.json()
         path = f"/v1/chat/sessions/{state['session_id']}/messages"
         if state["step"] == "profile":
             self.assertEqual(self.patient.post(path, json={"message": "no"}).status_code, 200)
-        for answer in ("30", "cough", "two days", "3", "ibuprofen", "none", "yes"):
+        for answer in intake_answers(medications="ibuprofen", additional_context=additional_context):
             response = self.patient.post(path, json={"message": answer})
             self.assertEqual(response.status_code, 200)
         state = response.json()
@@ -65,8 +65,8 @@ class VisitTests(unittest.TestCase):
         self.assertEqual(response.headers["cache-control"], "no-store")
 
     def test_broadcast_preview_atomic_accept_and_private_full_details(self):
-        self.complete()
-        state = self.complete()
+        self.complete(additional_context="previous_doctor_note_marker")
+        state = self.complete(additional_context="current_doctor_note_marker")
         request = self.create_request(state)
         queues = [client.get("/v1/doctor/requests", params={"status": "pending"}).json() for client in self.doctor_clients]
         for queue in queues:
@@ -78,6 +78,7 @@ class VisitTests(unittest.TestCase):
             self.assertIsNone(item["ai"])
             self.assertEqual(item["preview"], {"age": 30, "symptoms": "cough", "duration": "two days", "severity": 3})
             self.assertEqual(set(item), {"id","status","created_at","specialty","urgency","preview","patient","previous_visits","ai"})
+            self.assertNotIn("doctor_note_marker", json.dumps(item))
         barrier = Barrier(2)
         def accept(index):
             barrier.wait(timeout=10)
@@ -89,6 +90,12 @@ class VisitTests(unittest.TestCase):
         loser = 1 - winner
         accepted = next(response.json() for _, response in results if response.status_code == 200)
         self.assertEqual(accepted["patient"]["medications"], "ibuprofen")
+        self.assertEqual(accepted["patient"]["additional_context"], "current_doctor_note_marker")
+        self.assertEqual(accepted["previous_visits"][0]["additional_context"], "previous_doctor_note_marker")
+        for name, value in {"height_cm": 170.5, "weight_kg": 70.2, "chief_complaint": "synthetic complaint",
+                            "medical_history": "none", "medication_history": "none", "food_allergies": "none"}.items():
+            self.assertEqual(accepted["patient"][name], value)
+            self.assertEqual(accepted["previous_visits"][0][name], value)
         self.assertEqual(len(accepted["previous_visits"]), 1)
         self.assertEqual(accepted["ai"]["source"], "fallback")
         self.assertEqual(accepted["ai"]["notice"], visits.AI_NOTICE)
