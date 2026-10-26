@@ -20,8 +20,20 @@ def patient_user(user: dict = Depends(current_user)) -> dict:
     return user
 
 
+def admin_user(user: dict = Depends(current_user)) -> dict:
+    if user["role"] != "admin":
+        raise HTTPException(status_code=403)
+    return user
+
+
 def verified_doctor(user: dict = Depends(current_user)) -> dict:
     if user["role"] != "doctor" or not user["verified"]:
+        raise HTTPException(status_code=403)
+    return user
+
+
+def chat_user(user: dict = Depends(current_user)) -> dict:
+    if user["role"] not in ("patient", "doctor"):
         raise HTTPException(status_code=403)
     return user
 

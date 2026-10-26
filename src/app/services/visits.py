@@ -117,6 +117,7 @@ def _doctor_item(connection, row, doctor_id: str) -> dict:
 def doctor_requests(doctor_id: str, status: str | None = None) -> list[dict]:
     expire_requests()
     with closing(db.connect()) as connection, connection:
+        connection.execute("BEGIN IMMEDIATE")
         doctor = doctors.require_doctor(connection, doctor_id)
         # ponytail: this GET heartbeat is the explicit presence side effect; use a dedicated heartbeat or push presence when scaling.
         connection.execute("UPDATE doctors SET last_seen_at=? WHERE id=?", (db.utc_now(), doctor_id))

@@ -997,7 +997,7 @@ function createVisitChat(requestId, role, initiallyEnded) {
     (async () => {
       try {
         const result=await request("/v1/auth/me",undefined,"GET");
-        if (result.user.role!=="patient") {location.replace("/doctor");return;}
+        if (result.user.role!=="patient") {location.replace(result.user.role==="admin"?"/admin":"/doctor");return;}
         await start();await loadRequests();
       } catch(error) {fail(error);}
     })();

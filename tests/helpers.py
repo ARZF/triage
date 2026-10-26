@@ -1,4 +1,7 @@
 from contextlib import closing
+from contextlib import contextmanager
+import os
+from unittest.mock import patch
 from uuid import uuid4
 
 from app.core import db
@@ -43,9 +46,26 @@ def register_doctor(client, specialty="general_practice", username=None):
         "role": "doctor", "username": username, "password": PASSWORD,
         "name_fa": "پزشک فرضی آزمایشی", "specialty_code": specialty,
         "expertise": ["مرور اطلاعات", "گفت‌وگوی اولیه"],
+        "license_number": "DEMO-" + uuid4().hex[:15],
     })
     assert response.status_code == 201, response.text
     with closing(db.connect()) as connection:
         return dict(connection.execute(
             "SELECT d.* FROM doctors d JOIN users u ON u.id=d.user_id WHERE u.username=?", (username,)
         ).fetchone())
+
+
+@contextmanager
+def admin_account(client):
+    from app.services.admin import seed_admin
+    with patch.dict(os.environ, {"APP_ADMIN_USERNAME": "admin_demo", "APP_ADMIN_PASSWORD": PASSWORD}):
+        seed_admin()
+        response = client.post("/v1/auth/login", json={"username": "admin_demo", "password": PASSWORD})
+        assert response.status_code == 200, response.text
+        yield response.json()["user"]
+
+
+def approve_doctor(admin_client, doctor_id):
+    response = admin_client.post(f"/v1/admin/doctors/{doctor_id}/approve")
+    assert response.status_code == 200, response.text
+    return response.json()

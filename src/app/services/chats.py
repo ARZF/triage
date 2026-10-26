@@ -8,6 +8,8 @@ MESSAGE_LIMIT = 500
 
 
 def _participant(connection, request_id: str, user: dict):
+    if user["role"] not in ("patient", "doctor"):
+        raise ServiceError(403, "http_403", "Forbidden")
     row = connection.execute(
         """SELECT r.* FROM visit_requests r WHERE r.id=? AND r.status='accepted'
            AND ((?='patient' AND r.patient_id=?) OR (?='doctor' AND EXISTS (

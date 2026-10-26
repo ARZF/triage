@@ -20,3 +20,8 @@ async def login() -> FileResponse:
 @router.get("/doctor", response_class=FileResponse, include_in_schema=False)
 async def doctor() -> FileResponse:
     return FileResponse(STATIC / "doctor.html", media_type="text/html")
+
+
+@router.get("/admin", response_class=FileResponse, include_in_schema=False)
+async def admin() -> FileResponse:
+    return FileResponse(STATIC / "admin.html", media_type="text/html")

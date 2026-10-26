@@ -42,7 +42,7 @@ p,dd,pre,h3{overflow-wrap:anywhere;white-space:pre-wrap}dt{font-size:14px;color:
 <header><h1 id="doctor-name">داشبورد پزشک</h1><div class="actions">
 <label id="availability-control" hidden><input type="checkbox" id="available"> آمادهٔ پذیرش درخواست</label>
 <button id="logout" type="button">خروج</button></div></header>
-<p id="waiting" class="panel" hidden>حساب شما در انتظار تأیید است. تا زمان تأیید به اطلاعات بیماران دسترسی ندارید.</p>
+<section id="waiting" class="panel" role="status" hidden></section>
 <section id="dashboard" hidden aria-label="درخواست‌های ویزیت">
 <nav class="tabs" aria-label="صف و بیماران پذیرفته‌شده"><button id="queue-tab" aria-pressed="true" type="button">صف درخواست‌ها</button><button id="accepted-tab" aria-pressed="false" type="button">بیماران من</button></nav>
 <p id="status" role="status" aria-live="polite">در حال دریافت درخواست‌ها...</p>
@@ -256,7 +256,7 @@ async function refresh(){
   if(!user?.doctor?.verified||document.hidden||busy||loading)return;
   loading=true;
   try{const next=await request("/v1/doctor/requests");const changed=JSON.stringify(next)!==JSON.stringify(items);items=next;if(changed||renderedBusy!==busy)render();}
-  catch(error){if(error.status===403){items=[];requestList.replaceChildren();dashboard.hidden=true;availabilityControl.hidden=true;waiting.hidden=false;}
+  catch(error){if(error.status===403){await refreshIdentity();}
     else if(error.message!=="redirect")errorLine.textContent="دریافت درخواست‌ها انجام نشد. دوباره تلاش می‌شود.";}
   finally{loading=false;}
 }
@@ -279,16 +279,33 @@ document.getElementById("logout").addEventListener("click",async()=>{
   try{await request("/v1/auth/logout",undefined,"POST");location.replace("/login");}
   catch{errorLine.textContent="خروج انجام نشد. دوباره تلاش کنید.";}finally{busy=false;}
 });
-document.addEventListener("visibilitychange",()=>{if(!document.hidden)refresh();});
-(async()=>{
+let identityLoading=false;
+async function refreshIdentity(){
+  if(document.hidden||identityLoading)return;
+  identityLoading=true;
   try{
+    const previous=user;
     user=(await request("/v1/auth/me")).user;
-    if(user.role!=="doctor"){location.replace("/demo");return;}
-    try {specialtyNames=Object.fromEntries((await request("/v1/specialties")).map(item=>[item.code,item.name_fa]));} catch {}
+    if(user.role!=="doctor"){location.replace(user.role==="admin"?"/admin":"/demo");return;}
     nameLine.textContent=user.display_name;
-    if(!user.doctor.verified){waiting.hidden=false;return;}
-    available.checked=user.doctor.available;availabilityControl.hidden=false;dashboard.hidden=false;await refresh();
-    setInterval(refresh,10000);
-  }catch(error){if(error.message!=="redirect"){dashboard.hidden=false;errorLine.textContent="دریافت حساب انجام نشد. صفحه را دوباره باز کنید.";}}
+    if(!user.doctor.verified){
+      items=[];requestList.replaceChildren();
+      for(const chat of visitChats.values())chat.dispose();visitChats.clear();
+      dashboard.hidden=true;availabilityControl.hidden=true;waiting.hidden=false;waiting.replaceChildren();
+      const notices={pending:"حساب شما در انتظار بررسی و تأیید مدیر است.",rejected:"درخواست شما توسط مدیر رد شده است.",suspended:"دسترسی پزشک توسط مدیر تعلیق شده است."};
+      paragraph(waiting,notices[user.doctor.status]||"حساب هنوز تأیید نشده است.");
+      if(user.doctor.review_note)paragraph(waiting,"یادداشت مدیر: "+user.doctor.review_note);
+      return;
+    }
+    waiting.hidden=true;availabilityControl.hidden=false;dashboard.hidden=false;available.checked=user.doctor.available;
+    if(!previous?.doctor?.verified){render();await refresh();}
+  }catch(error){if(error.message!=="redirect"){waiting.hidden=false;waiting.textContent="دریافت وضعیت حساب انجام نشد. دوباره تلاش می‌شود.";}}
+  finally{identityLoading=false;}
+}
+document.addEventListener("visibilitychange",()=>{if(!document.hidden){refreshIdentity();refresh();}});
+(async()=>{
+  try {specialtyNames=Object.fromEntries((await request("/v1/specialties")).map(item=>[item.code,item.name_fa]));} catch {}
+  await refreshIdentity();
+  setInterval(refreshIdentity,5000);setInterval(refresh,10000);
 })();
 </script></body></html>

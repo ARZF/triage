@@ -3,7 +3,8 @@
 Synthetic-data FastAPI demo with scripted Persian intake, vocabulary matching,
 optional AI specialty triage, patient/doctor login and broadcast visit requests.
 Accepted patients and doctors can exchange direct text messages. Authentication
-is demo-grade; there is no prescription, appointment booking or admin role.
+is demo-grade. Administrators review doctor registrations without patient-data
+access; there is no prescription or appointment booking.
 
 ## Setup and the Slice 4 breaking update
 
@@ -18,7 +19,7 @@ For databases from the old anonymous demo only, stop the server and delete the o
 synthetic database once, or select a fresh APP_DB_PATH. Old anonymous visits
 have no account ownership and are not migrated into accounts. Keep any data
 you need before resetting. The application never deletes the database for you.
-Existing schema-v3, v4 and v5 databases upgrade automatically to schema v6;
+Existing schema-v3, v4, v5 and v6 databases upgrade automatically to schema v7;
 keep those databases when updating the intake or adding visit chat.
 
 ```powershell
@@ -26,12 +27,15 @@ keep those databases when updating the intake or adding visit chat.
 if (Test-Path -LiteralPath .\healthcare_agent.db) {
     Remove-Item -LiteralPath .\healthcare_agent.db
 }
-$env:APP_DOCTOR_AUTO_VERIFY = "true" # For newly self-registered demo doctors.
+$env:APP_ADMIN_USERNAME = "admin_demo"
+$env:APP_ADMIN_PASSWORD = "synthetic-admin-password" # Demo only, 12–128 characters.
+Remove-Item Env:APP_DOCTOR_AUTO_VERIFY -ErrorAction SilentlyContinue
 .\.venv\Scripts\python.exe -m uvicorn app.main:app --app-dir src
 ```
 
 Open [login](http://127.0.0.1:8000/login), [patient demo](http://127.0.0.1:8000/demo),
-[doctor dashboard](http://127.0.0.1:8000/doctor), or [API docs](http://127.0.0.1:8000/docs).
+[doctor dashboard](http://127.0.0.1:8000/doctor), [admin panel](http://127.0.0.1:8000/admin),
+or [API docs](http://127.0.0.1:8000/docs).
 
 ## Accounts and the demo workflow
 
@@ -40,16 +44,49 @@ Do not use real names, personal information or a password used elsewhere.
 Both patients and doctors self-register. Usernames are lowercased ASCII,
 3-32 characters from letters, digits, underscore, dot and hyphen. Passwords
 are 8-128 characters. Doctor registration also needs a fictional display
-name, a specialty and two or three short expertise phrases.
+name, a specialty, two or three short expertise phrases and a unique synthetic
+license_number: 4–20 ASCII letters/digits/hyphens, stripped. Missing/invalid
+licenses return 422; duplicates return 409 license_unavailable. These demo
+numbers are fake and unverified; this is not real license verification.
 
 Doctor accounts start unverified unless APP_DOCTOR_AUTO_VERIFY=true at
-registration. Unverified doctors can log in but see only a waiting banner
-and cannot access doctor data endpoints or appear in patient doctor lists.
-There is no admin approval flow yet; toggling auto-verify does not approve
-already-registered doctors.
+registration. APP_DOCTOR_AUTO_VERIFY=true is a local-demo shortcut that skips
+admin review for new registrations; it does not approve existing doctors.
+Pending, rejected and suspended doctors may log in and see their own status
+and review note, but have no queue/patient UI, doctor data access or patient
+directory listing. Their page checks status every five seconds while visible.
+
+The configured admin username, literal admin and all seed-doctor ids are reserved
+and cannot self-register. Admin accounts cannot self-register or access any
+patient/doctor data endpoint, including visit chat (403).
+
+## Admin setup and review
+
+Set both APP_ADMIN_USERNAME and APP_ADMIN_PASSWORD, or neither. The username
+must match lowercase ASCII [a-z0-9_.-], length 3–32; password length is 12–128.
+Settings never load .env files or include these values in repr. Startup creates
+the configured admin or refreshes its password hash. A username already owned
+by a patient/doctor fails startup; usernames cannot be reused across roles.
+With neither variable set, no admin is created and startup logs admin_disabled;
+previous admin accounts cannot authenticate while unconfigured.
+
+Log in as admin in a separate private browser session and open /admin. The panel
+shows a pending count, status tabs, synthetic doctor metadata and review audit;
+it never exposes usernames, password data, patient records, triage or chat.
+Visible admin pages refresh every 15 seconds. Approve pending registrations;
+Reject requires a 3–300-character stripped reason. Approved doctors may be
+suspended with a reason. Rejected/suspended doctors can be approved again.
+Invalid transitions return 409 invalid_transition and refresh the panel.
+
+Suspension atomically clears verification/availability/presence, ends that
+doctor's accepted unended visits and writes an audit entry. Patients retain
+readable history with ended=true and locked chat inputs. Other doctors' visits
+stay open. Reinstatement clears the review note but leaves ended visits ended
+and availability off until the doctor opts in. Seed-data refresh preserves
+admin review decisions. Review notes must contain synthetic information only.
 
 To exercise matching, register two doctors of general practice in separate
-private browser sessions and leave their dashboards open. Register a patient
+private browser sessions, approve them in /admin, and leave their dashboards open. Register a patient
 in another browser session, complete an intake, let triage finish, and press
 the broadcast visit-request button. Both online doctors see the preview.
 The first doctor to accept wins; the other queue clears on its next poll,
@@ -178,12 +215,13 @@ message ceiling returns 409 chat_full.
 ## API
 
 Public:
-- GET /health, /docs, /demo, /login, /doctor.
+- GET /health, /docs, /demo, /login, /doctor, /admin (pages enforce role redirects).
 - GET /v1/dictionaries/{kind}?q=&limit= (symptoms or medicines, q <=100, limit 1-100).
 - GET /v1/specialties -> [{code, name_fa}].
 - POST /v1/auth/register -> 201; POST /v1/auth/login -> 200.
   Both return {user: {id, role, username, display_name, doctor: null |
-  {verified, available, specialty: {code, name_fa}}}}.
+  {verified, status, review_note, available, specialty: {code, name_fa}}}}.
+  Roles are patient|doctor|admin; admin display_name is «مدیر سیستم» and doctor=null.
 
 Any logged-in role:
 - POST /v1/auth/logout -> 204; GET /v1/auth/me. Both require a valid cookie.
@@ -227,6 +265,19 @@ Other errors include 409 conflicts, 422 validation and 429 login throttle,
 all in {error: {code, message}}. Handlers do not echo inputs or credentials.
 All /v1 responses have Cache-Control: no-store.
 
+Admin role only:
+- GET /v1/admin/doctors?status=pending&limit=50&offset=0 -> {items, total}.
+  Status: pending|approved|rejected|suspended; limit 1–100, offset >=0.
+  Items: {id, name_fa, specialty, expertise, license_number, registered_at,
+  status, reviewed_at, review_note}. Pending is oldest first; others newest review first.
+- POST /v1/admin/doctors/{id}/approve -> updated item; pending/rejected/suspended only.
+- POST /v1/admin/doctors/{id}/reject {note} -> updated item; pending only.
+- POST /v1/admin/doctors/{id}/suspend {note} -> updated item; approved only.
+- GET /v1/admin/audit?limit=50 -> {items: [{id, action, doctor_id,
+  doctor_name_fa, from_status, to_status, note, created_at}]}, newest first, limit 1–100.
+  Doctor names are null if the doctor is missing. All admin APIs require auth
+  (401) and role admin (403 otherwise), and retain ErrorResponse/no-store.
+
 ## Configuration
 
 Settings use os.environ; .env files are not loaded. See .env.example.
@@ -237,6 +288,7 @@ Settings use os.environ; .env files are not loaded. See .env.example.
 - APP_DEMO_DOCTOR_PASSWORD: optional 8-128 characters; excluded from repr.
 - APP_DOCTOR_AUTO_VERIFY: true/false, default false; applies at registration.
 - APP_REQUEST_TTL_MINUTES: integer 1-1440, default 30.
+- APP_ADMIN_USERNAME / APP_ADMIN_PASSWORD: optional pair; admin setup above.
 
 Invalid new settings raise ValueError naming only the variable. Example:
 
@@ -279,14 +331,18 @@ Doctor-only AI summary/considerations are never in patient triage responses.
 
 ## Storage, vocabulary and demo limits
 
-SQLite schema version 6 keeps the accounts, expanded intake and optional context,
+SQLite schema version 7 keeps the accounts, expanded intake and optional context,
 adds nullable visit_requests.ended_at and an indexed visit_messages table through
 atomic, version-gated additive migrations. Patient deletion cascades through
 visit requests to direct messages. Fresh and upgraded databases have the same
-structure, including concurrent first connections.
+structure, including concurrent first connections. The v7 transaction rebuilds
+users to allow admin, preserves foreign-key references and indexes, and adds
+doctor review/license columns and admin_audit. A foreign_key_check must pass
+before commit; failures roll back and allow retry. Audit contains only admin/
+doctor ids, action, statuses, synthetic review note and timestamp, without foreign keys.
 Existing accounts, visits and messages are preserved; previously unanswered
-fields remain null. This upgrade does not require deleting a version-3, v4 or v5 database.
-Connections enable foreign keys and secure_delete; normal version-6 connections
+fields remain null. This upgrade does not require deleting a version-3 through v6 database.
+Connections enable foreign keys and secure_delete; normal version-7 connections
 skip schema writes. Connections close explicitly; message and acceptance
 transactions are short. Explicit SQLite migrations cover these additions; use dedicated
 migration tooling when migrations grow. SQLite files/journals are ignored by Git.
@@ -304,9 +360,9 @@ lawful basis and data-location decision for the provider, plus appropriate
 authentication hardening, encryption at rest, consent, retention and audit.
 AI considerations are generated, unverified and doctor-only.
 
-NOT implemented: admin approval of doctors, doctor credential checks, doctor
+NOT implemented: real doctor credential checks, doctor
 account deletion, ratings/reviews, password reset, email verification, MFA,
-audit log, general rate limiting, HTTPS enforcement, prescriptions
+patient-data audit log, general rate limiting, HTTPS enforcement, prescriptions
 or appointment scheduling. Retention is manual deletion only. Expired auth
 sessions are rejected; no scheduled token cleanup, backup or general migration framework
 is provided. Never commit real secrets. Usernames, passwords, tokens, cookies,
@@ -315,6 +371,11 @@ request bodies and headers are not logged; Uvicorn access logs stay disabled.
 Chat features NOT implemented: WebSocket/push, attachments, typing and read
 receipts, unread counts, moderation or reporting, message editing/deletion,
 retention, audit log, chat export and doctor-to-doctor transfer.
+
+Admin features NOT implemented: real license verification, admin user management
+and self-service password reset, multi-admin roles, admin MFA, per-IP rate
+limiting and alerting on admin actions. The review audit is limited to the
+three supported doctor transitions.
 
 Symptoms/medicines remain validated JSON starter catalogs, not clinically
 reviewed. Codes are unique lowercase slugs; names/aliases must be non-empty.
@@ -328,13 +389,13 @@ phrases and preserves first-appearance order. Catalog search uses substrings.
 - src/app/main.py: lifespan, routers, logging and no-store middleware.
 - src/app/core/: settings, SQLite, security, provider client and errors.
 - src/app/agent/: intake, sessions, vocabulary, bounded context and triage.
-- src/app/services/accounts.py, doctors.py, visits.py, chats.py: accounts,
-  presence, seeding, broadcast, acceptance, direct messages and visit ending.
+- src/app/services/accounts.py, doctors.py, visits.py, chats.py, admin.py: accounts,
+  presence, seeding, broadcast, acceptance, direct messages, visit ending and review.
 - src/app/api/: auth, dependencies, chat, owned patient routes, catalogs,
   doctor/request routes, accepted-visit chats.py and static pages.
 - src/app/schemas/: explicit request/response models.
 - src/app/data/: starter vocabulary and seed doctors.
-- src/app/static/: self-contained index.html, login.html and doctor.html.
+- src/app/static/: self-contained index.html, login.html, doctor.html and admin.html.
 - tests/: unittest checks, TestClient registration/login helper and temporary DBs.
 - docs/plan.md and docs/changelog.md: approved contracts and change history.
 

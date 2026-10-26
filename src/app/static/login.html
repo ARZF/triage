@@ -32,6 +32,8 @@ p,dd,pre,h3{overflow-wrap:anywhere;white-space:pre-wrap}dt{font-size:14px;color:
 <select id="role"><option value="patient">بیمار آزمایشی</option><option value="doctor">پزشک آزمایشی</option></select>
 <fieldset id="doctor-fields" hidden disabled>
 <label for="name-fa">نام نمایشی فرضی</label><input id="name-fa" minlength="2" maxlength="60" required autocomplete="off">
+<label for="license-number">شمارهٔ مجوز ساختگی</label><input id="license-number" required minlength="4" maxlength="20" pattern="[A-Za-z0-9-]{4,20}" dir="ltr" autocomplete="off" aria-describedby="license-help">
+<p id="license-help" class="muted">فقط شمارهٔ ساختگی وارد کنید؛ ۴ تا ۲۰ حرف انگلیسی، عدد یا خط تیره. مجوزها در این دمو راستی‌آزمایی نمی‌شوند.</p>
 <label for="specialty">تخصص</label><select id="specialty" required><option value="">در حال دریافت تخصص‌ها...</option></select>
 <label for="expertise-1">حوزهٔ کاری اول (ساختگی)</label><input id="expertise-1" required minlength="2" maxlength="40" autocomplete="off">
 <label for="expertise-2">حوزهٔ کاری دوم (ساختگی)</label><input id="expertise-2" required minlength="2" maxlength="40" autocomplete="off">
@@ -47,7 +49,7 @@ const role=document.getElementById("role"), registration=document.getElementById
 const specialty=document.getElementById("specialty"), errorLine=document.getElementById("error"), submit=document.getElementById("submit");
 const loginTab=document.getElementById("login-tab"), registerTab=document.getElementById("register-tab");
 let registering=false, busy=false;
-const destination=user=>user.role==="doctor"?"/doctor":"/demo";
+const destination=user=>user.role==="admin"?"/admin":user.role==="doctor"?"/doctor":"/demo";
 function mode(value){
   if(busy)return;
   registering=value;
@@ -59,7 +61,8 @@ function mode(value){
   errorLine.textContent="";
 }
 loginTab.addEventListener("click",()=>mode(false));registerTab.addEventListener("click",()=>mode(true));role.addEventListener("change",()=>mode(registering));
-function message(status){
+function message(status,code){
+  if(code==="license_unavailable")return "این شمارهٔ مجوز ساختگی در دسترس نیست.";
   return {401:"نام کاربری یا گذرواژه درست نیست.",403:"دسترسی مجاز نیست.",409:"این نام کاربری در دسترس نیست.",422:"اطلاعات واردشده را بررسی کنید.",429:"تلاش‌های ناموفق زیاد بوده است. کمی بعد دوباره امتحان کنید."}[status]||"ارتباط برقرار نشد. دوباره تلاش کنید.";
 }
 form.addEventListener("submit",async event=>{
@@ -70,6 +73,7 @@ form.addEventListener("submit",async event=>{
     body.role=role.value;
     if(body.role==="doctor"){
       body.name_fa=document.getElementById("name-fa").value;
+      body.license_number=document.getElementById("license-number").value.trim();
       body.specialty_code=specialty.value;
       body.expertise=[1,2,3].map(index=>document.getElementById("expertise-"+index).value.trim()).filter(Boolean);
     }
@@ -78,8 +82,12 @@ form.addEventListener("submit",async event=>{
     const response=await fetch("/v1/auth/"+(registering?"register":"login"),{
       method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify(body),signal:AbortSignal.timeout(10000)
     });
-    if(!response.ok){errorLine.textContent=message(response.status);return;}
-    const result=await response.json();password.value="";location.assign(destination(result.user));
+    if(!response.ok){let code;try{code=(await response.json()).error?.code;}catch{}errorLine.textContent=message(response.status,code);return;}
+    const result=await response.json();password.value="";
+    if(registering&&result.user.role==="doctor"&&result.user.doctor.status==="pending"){
+      errorLine.textContent="حساب پزشک ثبت شد و در انتظار بررسی مدیر است.";
+    }
+    location.assign(destination(result.user));
   }catch{errorLine.textContent=message(0);}
   finally{busy=false;submit.disabled=false;loginTab.disabled=false;registerTab.disabled=false;}
 });

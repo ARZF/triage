@@ -91,7 +91,7 @@ class ChatTests(unittest.TestCase):
             self.assertEqual(client.post("/v1/visit-requests/unknown/messages", json={"content": "synthetic"}).status_code, 404)
         self.assertEqual(self.doctor.post("/v1/visit-requests/unknown/end").status_code, 404)
         with closing(db.connect()) as connection, connection:
-            connection.execute("UPDATE doctors SET verified=0 WHERE id=?", (self.doctor_row["id"],))
+            connection.execute("UPDATE doctors SET verified=0, review_status='suspended' WHERE id=?", (self.doctor_row["id"],))
         self.assertEqual(self.doctor.get(self.url + "/messages").status_code, 404)
 
     def test_unaccepted_requests_are_hidden(self):
@@ -236,7 +236,7 @@ class ChatTests(unittest.TestCase):
             def connect(_):
                 with closing(db.connect()) as connection:
                     return connection.execute("PRAGMA user_version").fetchone()[0]
-            self.assertEqual(list(pool.map(connect, range(3))), [6, 6, 6])
+            self.assertEqual(list(pool.map(connect, range(3))), [7, 7, 7])
         with closing(db.connect()) as connection:
             self.assertEqual(connection.execute("SELECT status FROM visit_requests WHERE id=?", (self.visit_id,)).fetchone()[0], "accepted")
             def structure(connection):
@@ -246,7 +246,7 @@ class ChatTests(unittest.TestCase):
             upgraded = structure(connection)
         fresh = self.path.with_name("fresh.db")
         with patch.dict(os.environ, {"APP_DB_PATH": str(fresh)}), ThreadPoolExecutor(max_workers=3) as pool:
-            self.assertEqual(list(pool.map(connect, range(3))), [6, 6, 6])
+            self.assertEqual(list(pool.map(connect, range(3))), [7, 7, 7])
             with closing(db.connect()) as connection:
                 self.assertEqual(structure(connection), upgraded)
                 self.assertEqual([row[2] for row in connection.execute("PRAGMA index_info(visit_messages_request_id)")], ["request_id", "id"])

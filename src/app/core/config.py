@@ -1,5 +1,6 @@
 import math
 import os
+import re
 from dataclasses import dataclass, field
 from urllib.parse import urlsplit
 
@@ -45,8 +46,16 @@ class Settings:
     demo_doctor_password: str | None = field(default_factory=lambda: os.environ.get("APP_DEMO_DOCTOR_PASSWORD") or None, repr=False)
     doctor_auto_verify: bool = field(default_factory=lambda: _bool_env("APP_DOCTOR_AUTO_VERIFY", "false"))
     request_ttl_minutes: int = field(default_factory=lambda: _int_env("APP_REQUEST_TTL_MINUTES", "30", 1, 1440))
+    admin_username: str | None = field(default_factory=lambda: os.environ.get("APP_ADMIN_USERNAME") or None, repr=False)
+    admin_password: str | None = field(default_factory=lambda: os.environ.get("APP_ADMIN_PASSWORD") or None, repr=False)
 
     def __post_init__(self) -> None:
+        if bool(self.admin_username) != bool(self.admin_password):
+            raise ValueError("APP_ADMIN_USERNAME and APP_ADMIN_PASSWORD")
+        if self.admin_username is not None and not re.fullmatch(r"[a-z0-9_.-]{3,32}", self.admin_username):
+            raise ValueError("APP_ADMIN_USERNAME")
+        if self.admin_password is not None and not 12 <= len(self.admin_password) <= 128:
+            raise ValueError("APP_ADMIN_PASSWORD")
         if self.demo_doctor_password is not None and not 8 <= len(self.demo_doctor_password) <= 128:
             raise ValueError("APP_DEMO_DOCTOR_PASSWORD")
         if not self.db_path.strip():

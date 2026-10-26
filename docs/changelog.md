@@ -11,6 +11,13 @@ move them into a dated version section when a release is made.
 
 ### Added
 
+- Slice 6: configured admin login and Persian doctor-review panel with pending,
+  approved, rejected and suspended lists, paging and review audit.
+- Atomic schema-v7 users rebuild and doctor review/license columns; preserve
+  account/session/visit references and restore foreign-key enforcement on failure.
+- Admin-only review transitions and audit endpoints; suspension ends the doctor's
+  open accepted visits while preserving readable patient history.
+
 - Slice 5: authenticated patient/accepting-doctor text chat, cursor pagination,
   a 500-message ceiling and idempotent doctor-controlled visit ending.
 - Persian inline visit-chat panels on both pages, three-second visible-panel
@@ -70,11 +77,20 @@ move them into a dated version section when a release is made.
 
 ### Breaking
 
+- Doctor self-registration now requires a unique synthetic license_number
+  (4–20 ASCII letters/digits/hyphens). It is not real credential verification.
+
 - Chat and patient history/deletion now require patient cookie authentication; removed the patient_id creation body/ChatResponse field and old /v1/patients/{patient_id}/... routes.
 - Patient history/deletion moved to /v1/me/history and DELETE /v1/me; the demo no longer uses a localStorage patient handle.
 - Doctors now come from schema-v3 SQLite rows; doctors.json is seed data without online fields, online presence is computed and scores may be null. Reset the old disposable synthetic database once.
 
 ### Changed
+
+- Doctor accounts expose review status/note; pending, rejected and suspended
+  dashboards hide patient UI and poll for review changes. Admins are denied all
+  patient/doctor data routes, and login/page redirects now handle three roles.
+- Preserve seed-doctor review decisions on restart; document auto-verification
+  as a local-demo shortcut bypassing admin review.
 
 - Patient request polling now projects expired status without writing rows;
   direct-message reads also leave database rows and doctor presence unchanged.

@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>مدیریت ثبت‌نام پزشکان</title>
+<style>
+:root{--paper:#f5f5ef;--surface:#fff;--ink:#203b35;--muted:#576b64;--line:#d5ddd5;--accent:#245d48;--tint:#eaf1e9;--danger:#9c2929}
+*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.7 Tahoma,"Segoe UI",sans-serif}
+.banner{padding:10px 16px;background:var(--ink);color:#fff;text-align:center}.shell{max-width:1050px;margin:auto;padding:24px 16px}
+header,.actions,.tabs,.paging{display:flex;gap:12px;align-items:center;flex-wrap:wrap}header{justify-content:space-between}h1{font-size:28px;font-weight:500}h2{font-size:21px;margin:0 0 8px}
+button,textarea{font:inherit;border:1px solid var(--line);border-radius:6px;padding:8px 12px;min-height:44px}button{background:var(--accent);color:white;cursor:pointer}button:disabled{opacity:.5;cursor:default}
+.secondary,.tabs button[aria-pressed=false]{background:var(--surface);color:var(--ink)}.danger{color:var(--danger);background:var(--surface);border-color:var(--danger)}:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
+.tabs{margin:20px 0}.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:20px;margin:16px 0;min-width:0}.card p,.card dd{overflow-wrap:anywhere;white-space:pre-wrap}
+.muted,dt{color:var(--muted);font-size:14px}dl{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}dt{margin:0}dd{margin:4px 0}.chip{display:inline-block;padding:3px 10px;border-radius:16px;background:var(--tint);margin:3px}
+form{padding:16px;background:var(--tint);border-radius:8px;margin-top:16px}label{display:block;margin-bottom:8px}textarea{width:100%;min-height:110px;resize:vertical;color:var(--ink);background:var(--surface)}.counter{margin:4px 0 12px;font-size:14px;color:var(--muted)}.error{color:var(--danger);white-space:pre-wrap}.error:empty{display:none}[hidden]{display:none!important}.paging{justify-content:center;margin:20px 0}
+@media(max-width:600px){h1{font-size:23px}.card{padding:16px}dl{grid-template-columns:minmax(0,1fr)}.actions button{flex:1}.tabs{gap:8px}}
+</style>
+</head>
+<body>
+<div class="banner">دموی آزمایشی — فقط اطلاعات ساختگی</div>
+<main class="shell">
+<header><div><h1>مدیریت ثبت‌نام پزشکان</h1><p id="pending-count" role="status">در حال دریافت تعداد درخواست‌ها...</p></div><button id="logout" type="button" class="secondary">خروج</button></header>
+<p class="muted">این بخش فقط برای بررسی ثبت‌نام پزشکان است. شماره‌های مجوز ساختگی و راستی‌آزمایی‌نشده‌اند.</p>
+<nav class="tabs" aria-label="وضعیت ثبت‌نام و رویدادها">
+<button type="button" data-tab="pending" aria-pressed="true">در انتظار بررسی</button>
+<button type="button" data-tab="approved" aria-pressed="false">تأییدشده</button>
+<button type="button" data-tab="rejected" aria-pressed="false">ردشده</button>
+<button type="button" data-tab="suspended" aria-pressed="false">تعلیق‌شده</button>
+<button type="button" data-tab="audit" aria-pressed="false">رویدادها</button>
+</nav>
+<p id="error" class="error" role="alert"></p><p id="status" role="status">در حال دریافت...</p>
+<section id="items" aria-label="فهرست بررسی پزشکان"></section>
+<nav class="paging" aria-label="صفحه‌بندی پزشکان"><button id="previous" type="button" class="secondary">صفحهٔ قبل</button><span id="page-count"></span><button id="next" type="button" class="secondary">صفحهٔ بعد</button></nav>
+</main>
+<script>
+const items=document.getElementById("items"),errorLine=document.getElementById("error"),statusLine=document.getElementById("status"),pendingCount=document.getElementById("pending-count");
+const previous=document.getElementById("previous"),next=document.getElementById("next"),pageCount=document.getElementById("page-count");
+const statusNames={pending:"در انتظار بررسی",approved:"تأییدشده",rejected:"ردشده",suspended:"تعلیق‌شده"};
+const actionNames={approve:"تأیید",reject:"رد درخواست",suspend:"تعلیق"};
+let tab="pending",offset=0,total=0,busy=false,loading=false,ready=false;
+const limit=20,drafts=new Map();
+async function call(path,method="GET",body){
+  const response=await fetch(path,{method,credentials:"same-origin",headers:body?{"Content-Type":"application/json"}:{},body:body?JSON.stringify(body):undefined,signal:AbortSignal.timeout(10000)});
+  if(response.status===401){location.replace("/login");throw Object.assign(Error(),{status:401});}
+  if(!response.ok){let code;try{code=(await response.json()).error?.code;}catch{}throw Object.assign(Error(),{status:response.status,code});}
+  return response.status===204?null:response.json();
+}
+async function showError(error){
+  errorLine.textContent=error.status===404?"پزشک موردنظر در دسترس نیست.":error.code==="invalid_transition"?"وضعیت پزشک تغییر کرده است؛ فهرست به‌روز شد."
+    :error.status===409?"این تغییر اکنون ممکن نیست.":error.status===422?"یادداشت باید بین ۳ تا ۳۰۰ نویسه باشد."
+    :error.status===403?"دسترسی مدیریت مجاز نیست.":"درخواست تأیید نشد. اتصال را بررسی کنید؛ پیش از تکرار تغییر، وضعیت را دوباره بررسی کنید.";
+  if(error.status===403){const result=await call("/v1/auth/me");location.replace(result.user.role==="doctor"?"/doctor":"/demo");}
+}
+function paragraph(parent,text,className=""){const node=document.createElement("p");node.className=className;node.textContent=text;parent.append(node);return node;}
+function controls(){
+  document.querySelectorAll('[data-tab],#logout').forEach(button=>button.disabled=busy);
+  previous.disabled=busy||loading||offset===0;next.disabled=busy||loading||offset+limit>=total;
+  previous.hidden=next.hidden=pageCount.hidden=tab==="audit";
+  pageCount.textContent="صفحهٔ "+(Math.floor(offset/limit)+1).toLocaleString("fa-IR")+" از "+Math.max(1,Math.ceil(total/limit)).toLocaleString("fa-IR");
+}
+async function transition(doctor,action,note){
+  if(busy)return;busy=true;errorLine.textContent="";controls();
+  const buttons=[...items.querySelectorAll("button")];buttons.forEach(button=>button.disabled=true);
+  try{await call("/v1/admin/doctors/"+encodeURIComponent(doctor.id)+"/"+action,"POST",note===undefined?undefined:{note});drafts.delete(doctor.id);}
+  catch(error){await showError(error);}
+  finally{busy=false;buttons.forEach(button=>button.disabled=false);await refresh(true);controls();}
+}
+function noteForm(card,doctor,action){
+  card.querySelector("form")?.remove();
+  const form=document.createElement("form"),label=document.createElement("label"),input=document.createElement("textarea"),counter=document.createElement("p"),actions=document.createElement("div"),confirm=document.createElement("button"),cancel=document.createElement("button");
+  input.id="review-note-"+doctor.id;input.rows=3;input.required=true;input.maxLength=300;input.value=drafts.get(doctor.id)?.note||"";
+  label.htmlFor=input.id;label.textContent="دلیل "+actionNames[action]+" (فقط اطلاعات ساختگی)";counter.className="counter";
+  confirm.type="submit";confirm.textContent="تأیید "+actionNames[action];cancel.type="button";cancel.className="secondary";cancel.textContent="انصراف";actions.className="actions";actions.append(confirm,cancel);
+  const update=()=>{const length=[...input.value.trim()].length;confirm.disabled=busy||length<3||length>300;counter.textContent=length.toLocaleString("fa-IR")+" / ۳۰۰";drafts.set(doctor.id,{action,note:input.value});};
+  input.addEventListener("input",update);cancel.addEventListener("click",()=>{drafts.delete(doctor.id);form.remove();});
+  form.addEventListener("submit",event=>{event.preventDefault();if(!confirm.disabled)transition(doctor,action,input.value.trim());});
+  form.append(label,input,counter,actions);card.append(form);update();input.focus();
+}
+function doctorCard(doctor){
+  const card=document.createElement("article"),heading=document.createElement("h2"),details=document.createElement("dl"),actions=document.createElement("div");card.className="card";card.dataset.doctorId=doctor.id;heading.textContent=doctor.name_fa;card.append(heading);
+  paragraph(card,doctor.specialty.name_fa);
+  const tags=document.createElement("div");for(const phrase of doctor.expertise){const chip=document.createElement("span");chip.className="chip";chip.textContent=phrase;tags.append(chip);}card.append(tags);
+  for(const [label,text] of [["مجوز ساختگی",doctor.license_number||"دادهٔ اولیه؛ بدون شمارهٔ مجوز"],["تاریخ ثبت‌نام",new Date(doctor.registered_at).toLocaleString("fa-IR")],["وضعیت",statusNames[doctor.status]],["آخرین بررسی",doctor.reviewed_at?new Date(doctor.reviewed_at).toLocaleString("fa-IR"):"هنوز بررسی نشده"]]){const field=document.createElement("div"),term=document.createElement("dt"),value=document.createElement("dd");term.textContent=label;value.textContent=text;field.append(term,value);details.append(field);}card.append(details);
+  if(doctor.review_note)paragraph(card,"یادداشت مدیر: "+doctor.review_note);
+  actions.className="actions";
+  const allowed=doctor.status==="approved"?["suspend"]:doctor.status==="pending"?["approve","reject"]:["approve"];
+  for(const action of allowed){const button=document.createElement("button");button.type="button";button.dataset.action=action;button.textContent=action==="approve"&&doctor.status==="suspended"?"بازگردانی دسترسی":actionNames[action];if(action!=="approve")button.className="danger";button.addEventListener("click",()=>{if(busy)return;if(action==="approve")transition(doctor,action);else noteForm(card,doctor,action);});actions.append(button);}card.append(actions);
+  return card;
+}
+function render(data){
+  items.replaceChildren();
+  document.querySelectorAll("[data-tab]").forEach(button=>button.setAttribute("aria-pressed",String(button.dataset.tab===tab)));
+  if(tab==="audit"){
+    statusLine.textContent="آخرین "+data.items.length.toLocaleString("fa-IR")+" رویداد";
+    for(const item of data.items){const card=document.createElement("article");card.className="card";paragraph(card,actionNames[item.action]+" · "+(item.doctor_name_fa||"پزشک حذف‌شده"));paragraph(card,(statusNames[item.from_status]||"—")+" ← "+(statusNames[item.to_status]||"—"));if(item.note)paragraph(card,item.note);paragraph(card,new Date(item.created_at).toLocaleString("fa-IR"),"muted");items.append(card);}
+  }else{total=data.total;statusLine.textContent=total.toLocaleString("fa-IR")+" پزشک · "+statusNames[tab];for(const doctor of data.items){const card=doctorCard(doctor);items.append(card);const draft=drafts.get(doctor.id);if(draft&&((draft.action==="reject"&&doctor.status==="pending")||(draft.action==="suspend"&&doctor.status==="approved")))noteForm(card,doctor,draft.action);}}
+  if(!data.items.length)paragraph(items,"موردی برای نمایش وجود ندارد.","muted");controls();
+}
+async function refresh(force=false){
+  if(!ready||loading||busy||document.hidden)return;loading=true;controls();
+  const requestedTab=tab,requestedOffset=offset;
+  try{
+    const pending=await call("/v1/admin/doctors?status=pending&limit=1");pendingCount.textContent=pending.total.toLocaleString("fa-IR")+" پزشک در انتظار بررسی";
+    const data=await call(tab==="audit"?"/v1/admin/audit?limit=100":"/v1/admin/doctors?status="+tab+"&limit="+limit+"&offset="+offset);
+    if(requestedTab!==tab||requestedOffset!==offset)return;
+    // Preserve an unfinished review while the periodic refresh updates the count.
+    if(force||!items.querySelector("form"))render(data);
+  }catch(error){await showError(error);}
+  finally{loading=false;controls();if(requestedTab!==tab||requestedOffset!==offset)refresh();}
+}
+document.querySelectorAll("[data-tab]").forEach(button=>button.addEventListener("click",()=>{if(busy)return;tab=button.dataset.tab;offset=0;items.replaceChildren();refresh(true);}));
+previous.addEventListener("click",()=>{offset=Math.max(0,offset-limit);refresh(true);});next.addEventListener("click",()=>{offset+=limit;refresh(true);});
+document.getElementById("logout").addEventListener("click",async()=>{if(busy)return;busy=true;controls();try{await call("/v1/auth/logout","POST");location.replace("/login");}catch(error){await showError(error);}finally{busy=false;controls();}});
+document.addEventListener("visibilitychange",()=>{if(!document.hidden)refresh();});
+(async()=>{try{const result=await call("/v1/auth/me");if(result.user.role!=="admin"){location.replace(result.user.role==="doctor"?"/doctor":"/demo");return;}ready=true;await refresh();setInterval(refresh,15000);}catch(error){await showError(error);}})();
+</script>
+</body>
+</html>

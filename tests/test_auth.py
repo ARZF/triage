@@ -143,7 +143,7 @@ class AuthTests(unittest.TestCase):
 
     def test_registration_validation_duplicates_reserved_and_extra_fields(self):
         patient = {"role": "patient", "username": "valid_patient", "password": PASSWORD}
-        doctor = {**patient, "role": "doctor", "name_fa": "پزشک فرضی", "specialty_code": "general_practice", "expertise": ["مرور اطلاعات", "گفت‌وگوی اولیه"]}
+        doctor = {**patient, "role": "doctor", "license_number": "DEMO-1234", "name_fa": "پزشک فرضی", "specialty_code": "general_practice", "expertise": ["مرور اطلاعات", "گفت‌وگوی اولیه"]}
         invalid = [
             {**patient, "username": "a"}, {**patient, "username": "bad name"},
             {**patient, "password": "short"}, {**patient, "password": "x" * 129},
@@ -249,10 +249,10 @@ class AuthTests(unittest.TestCase):
 
     def test_database_hardening_skips_schema_writes_on_normal_connections(self):
         with closing(db.connect()) as connection:
-            self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 6)
+            self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 7)
             self.assertEqual(connection.execute("PRAGMA secure_delete").fetchone()[0], 1)
             connection.execute("BEGIN IMMEDIATE")
             with patch.object(db, "SCHEMA", "invalid schema must not execute"):
                 with closing(db.connect()) as reader:
-                    self.assertEqual(reader.execute("PRAGMA user_version").fetchone()[0], 6)
+                    self.assertEqual(reader.execute("PRAGMA user_version").fetchone()[0], 7)
             connection.rollback()

@@ -134,7 +134,56 @@ def connect() -> sqlite3.Connection:
                     created_at TEXT NOT NULL
                 )""")
                 connection.execute("CREATE INDEX IF NOT EXISTS visit_messages_request_id ON visit_messages(request_id, id)")
-                connection.execute("PRAGMA user_version=6")
+                if connection.execute("PRAGMA user_version").fetchone()[0] < 6:
+                    connection.execute("PRAGMA user_version=6")
+        if connection.execute("PRAGMA user_version").fetchone()[0] < 7:
+            # SQLite's table-rebuild procedure requires foreign_keys OFF outside a transaction.
+            connection.execute("PRAGMA foreign_keys=OFF")
+            try:
+                with connection:
+                    connection.execute("BEGIN IMMEDIATE")
+                    if connection.execute("PRAGMA user_version").fetchone()[0] < 7:
+                        indexes = [row[0] for row in connection.execute(
+                            "SELECT sql FROM sqlite_master WHERE type='index' AND tbl_name='users' AND sql IS NOT NULL"
+                        )]
+                        connection.execute("""CREATE TABLE users_new (
+                            id TEXT PRIMARY KEY,
+                            role TEXT NOT NULL CHECK (role IN ('patient','doctor','admin')),
+                            username TEXT UNIQUE NOT NULL,
+                            password_hash TEXT NOT NULL,
+                            patient_id TEXT UNIQUE REFERENCES patients(id) ON DELETE CASCADE,
+                            created_at TEXT NOT NULL,
+                            CHECK ((role='patient' AND patient_id IS NOT NULL) OR
+                                   (role IN ('doctor','admin') AND patient_id IS NULL))
+                        )""")
+                        connection.execute("INSERT INTO users_new SELECT * FROM users")
+                        connection.execute("DROP TABLE users")
+                        connection.execute("ALTER TABLE users_new RENAME TO users")
+                        for sql in indexes:
+                            connection.execute(sql)
+                        columns = {row["name"] for row in connection.execute("PRAGMA table_info(doctors)")}
+                        for name, kind in (("review_status", "TEXT NOT NULL DEFAULT 'pending'"), ("license_number", "TEXT"),
+                                           ("reviewed_at", "TEXT"), ("review_note", "TEXT")):
+                            if name not in columns:
+                                connection.execute(f"ALTER TABLE doctors ADD COLUMN {name} {kind}")
+                        connection.execute("UPDATE doctors SET review_status='approved' WHERE verified=1")
+                        connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS doctors_license_number ON doctors(license_number) WHERE license_number IS NOT NULL")
+                        connection.execute("""CREATE TABLE IF NOT EXISTS admin_audit (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            admin_user_id TEXT NOT NULL,
+                            action TEXT NOT NULL,
+                            doctor_id TEXT NOT NULL,
+                            from_status TEXT,
+                            to_status TEXT,
+                            note TEXT,
+                            created_at TEXT NOT NULL
+                        )""")
+                        connection.execute("CREATE INDEX IF NOT EXISTS admin_audit_created ON admin_audit(created_at)")
+                        if connection.execute("PRAGMA foreign_key_check").fetchone() is not None:
+                            raise sqlite3.IntegrityError("Schema migration foreign key check failed")
+                        connection.execute("PRAGMA user_version=7")
+            finally:
+                connection.execute("PRAGMA foreign_keys=ON")
         return connection
     except BaseException:
         connection.close()

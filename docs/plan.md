@@ -1,6 +1,6 @@
 # Healthcare Agent: Implementation Plan and Specification
 
-Status: Slices 1a, 2a, 2b, 3, 4 and 5 approved. Scripted intake, vocabulary, SQLite memory, optional specialty triage, accounts, broadcast visits and accepted-visit text chat are implemented; future workflow decisions remain proposals.
+Status: Slices 1a, 2a, 2b, 3, 4, 5 and 6 approved. Intake, vocabulary, memory, specialty triage, accounts, visits, direct text chat and admin doctor review are in scope; future workflow decisions remain proposals.
 
 ## 1. Purpose
 
@@ -18,6 +18,7 @@ at a time, with an explicit API contract and a runnable check for its behavior.
 - The expanded Persian intake includes height/weight, main complaint, disease/medication histories and food/drug allergies, with multi-item symptom and medicine editors. Schema v4 adds nullable columns without resetting version-3 data.
 - Schema v5 adds optional doctor-only context, explicitly excluded from current/prior provider inputs. Final review is an inline Persian card with validated field-specific corrections before confirmation.
 - Schema v6 adds visit end timestamps and indexed direct messages. Patient request/message polling is read-only; the doctor alone ends an accepted visit without removing its history.
+- Schema v7 adds the configured admin role, synthetic license numbers, doctor review states and a review-only audit. Suspension also ends the doctor's open visits. Admins cannot access patient data.
 - `src/app/core/config.py` defines frozen settings read from `os.environ`. `APP_LOG_LEVEL` defaults to `INFO`; INFO, WARNING, ERROR, and CRITICAL are accepted (case insensitive). Invalid values fail startup. The application does not load `.env` files.
 
 ## 3. Project boundaries
@@ -35,6 +36,7 @@ at a time, with an explicit API contract and a runnable check for its behavior.
 - The expanded Persian intake feature below supersedes earlier question orders, returning-profile fields, single-symptom editor behavior and schema version. No additional folders are approved or created.
 - The doctor-only context/inline review feature supersedes the preceding intake's final steps and schema version: optional additional_context precedes confirm; corrections reuse the message route without another endpoint.
 - Slice 5 supersedes earlier direct-chat exclusions, schema version and patient-list expiry writes. It uses only existing approved folders; no folders or dependencies are added.
+- Slice 6 supersedes earlier admin exclusions, doctor registration requirements and schema version. Review audit is implemented; patient/chat audit remains excluded. It reuses existing folders and dependencies.
 
 ## 4. Decisions for persistence and future slices
 
@@ -280,6 +282,31 @@ Complete this section for each agreed feature before writing its code:
 - **Runnable check:** .\.venv\Scripts\python.exe -m unittest discover tests before/after; migration/authorization/pagination/validation/cap/end/race/read-only/deletion/privacy checks using temporary DBs and patched clocks. Reinstall editable package, run Uvicorn and verify both pages in isolated browser sessions; report manual limits.
 - **NOT implemented:** WebSocket/push, attachments, typing/read receipts, unread counts, moderation/reporting, message editing/deletion, retention, audit log, chat export, doctor-to-doctor transfer.
 
+### Feature: Slice 6 — admin doctor review and audit
+
+- **Status:** implemented (recorded as approved before application edits).
+- **User outcome:** a configured administrator reviews synthetic doctor registrations, rejects or suspends with a reason, and reinstates through approval; doctors see their status and patients retain ended visit history.
+- **Scope:** no new folders or dependencies. Add services/admin.py, api/admin.py, schemas/admin.py, static/admin.html and tests/test_admin.py. No admin access to patient information, intakes, triage or chat.
+- **API contract:** GET /v1/admin/doctors?status=pending&limit=50&offset=0 returns {items:[{id,name_fa,specialty:{code,name_fa},expertise,license_number,registered_at,status,reviewed_at,review_note}],total}. Status is pending|approved|rejected|suspended; limit 1–100 and offset a nonnegative SQLite integer. Pending sorts oldest registration first, other lists newest review first. POST /v1/admin/doctors/{id}/approve returns the updated item; POST reject/suspend takes {note:str}, stripped length 3–300 with extras forbidden. GET /v1/admin/audit?limit=50 returns newest-first {items:[{id,action,doctor_id,doctor_name_fa,from_status,to_status,note,created_at}]}, limit 1–100; missing doctor names are null. GET /admin serves the self-contained page.
+- **Validation:** DoctorRegistration requires stripped license_number matching ^[A-Za-z0-9-]{4,20}$; duplicates -> 409 license_unavailable. Reserve the configured admin username, literal admin and seed-doctor ids. Registration cannot supply status/verified or role admin. Public doctor account adds status and review_note; admin display_name is «مدیر سیستم», doctor=null.
+- **Agent behavior:** reuse existing auth, cookies and login throttle; admin_user requires role admin. Every patient/doctor data endpoint, including visit chat, rejects admins with 403. Non-admin /v1/admin calls return 403; no cookie -> 401. ErrorResponse and no-store apply. Rejected/suspended doctors may log in but doctor data endpoints remain 403.
+- **Persistence:** schema v7 rebuilds users with patient|doctor|admin role CHECK, preserving columns, rows, indexes and foreign-key references. With no transaction: disable foreign keys, BEGIN IMMEDIATE, recheck version, create/copy/drop/rename users, add doctor columns, create unique non-null license index and admin_audit with created_at index, foreign_key_check, set version, commit; restore foreign keys even on failure. Roll back on error and permit retry. Existing verified doctors become approved once; others pending. Concurrent connections cannot downgrade schema. Audit has no foreign keys; store only admin/doctor ids, action, statuses, synthetic review note and timestamp.
+- **Transitions:** one guarded UPDATE plus rowcount check under BEGIN IMMEDIATE; unknown -> 404, wrong state -> 409 invalid_transition. Set review_status, matching verified, reviewed_at and review_note together. Approve clears note; reject/suspend clear availability and heartbeat. Suspend ends all accepted unended visits for that doctor at the same timestamp and writes one audit row in the same transaction. Reinstatement leaves ended visits ended and availability off until the doctor opts in. Seed refresh must preserve admin review decisions.
+
+| Action | Allowed from | To | Note |
+| --- | --- | --- | --- |
+| approve / reinstate | pending, rejected, suspended | approved | cleared |
+| reject | pending | rejected | required |
+| suspend | approved | suspended | required |
+
+- **Access and data handling:** admins see only doctor registration metadata and review audit, never usernames/passwords/patient data. Patients see only existing owned data and the doctor's public projection; doctors see their own review note via /v1/auth/me. No credentials, review notes or message bodies in logs. License numbers are fake and unverified.
+- **Configuration:** APP_ADMIN_USERNAME and APP_ADMIN_PASSWORD are hidden from Settings repr, both or neither; incomplete pair raises ValueError naming both variables. Username ^[a-z0-9_.-]{3,32}$, password 12–128. Startup creates/refreshes only the configured admin, refuses patient/doctor username clashes with variable-only ValueError, and logs admin_disabled without secrets when unset. Disabled/unconfigured admin credentials do not grant access. APP_DOCTOR_AUTO_VERIFY remains false by default; true is a local-demo shortcut bypassing review.
+- **Demo:** Persian RTL inline CSS/vanilla JS/textContent only. Login adds synthetic license input, waiting message and role redirects. Admin page shows pending count, status/audit tabs, pagination, metadata cards, approve and inline reason/confirmation controls, status-specific errors and conflict refresh; visible-tab refresh every 15 seconds. Doctor page polls own status, displays pending/rejected/suspended notices with safe note text, hides all patient UI and unlocks after approval. Both existing pages redirect admins to /admin.
+- **Failure behavior:** preserve review drafts during refresh; do not automatically repeat ambiguous writes. Refresh after conflicts. Doctor suspension clears cached patient UI; patient history remains readable with chat locked. Migration/seeding failure prevents startup without leaking contents.
+- **Acceptance examples:** pending registration -> approve -> doctor access; suspend with note -> doctor denied and only that doctor's open visits ended; rejected/suspended -> approve; two concurrent approvals -> one success, one 409, one audit row.
+- **Runnable check:** unittest before/after with temporary databases and no network, config/seeding/license/role/transition/audit/concurrency/migration rollback and preservation checks; reinstall editable package and browser walkthrough with distinct synthetic accounts. Report actual private-window and browser limitations.
+- **NOT implemented:** real license verification, admin user management and self-service password reset, multi-admin roles, admin MFA, per-IP rate limiting, alerting on admin actions.
+
 ## 6. Coding and verification rules
 
 - Trace the affected flow and callers before changing shared behavior.
@@ -338,6 +365,8 @@ current. Report any unverified behavior or remaining limitations explicitly.
 - `src/app/services/chats.py`, `api/chats.py`, `schemas/chats.py`: accepted-visit participation, message pagination/insertion and doctor-controlled ending; distinct from scripted intake in api/chat.py.
 - `src/app/services/visits.py`, `schemas/visits.py`: read-only patient expiry projection, doctor heartbeat/sweep, broadcast/acceptance and ended visit items.
 - `tests/test_chats.py`: schema-v6 migration, direct-chat access, limits, concurrency, read-only polling and deletion/privacy checks.
+- `src/app/services/admin.py`, `api/admin.py`, `schemas/admin.py`, `static/admin.html`: configured admin seeding, doctor review/audit projections and Persian panel, without patient data access.
+- `tests/test_admin.py`: admin configuration, seeding, license/role boundaries, transitions, audit, suspension, schema-v7 preservation/concurrency/rollback checks.
 - `tests/test_health.py`: health and settings checks.
 - `tests/test_errors.py`: unknown path, validation privacy, and HTTP exception privacy checks.
 
@@ -746,3 +775,82 @@ new api/chats.py, schemas/chats.py, services/chats.py;
 static/index.html and static/doctor.html;
 new tests/test_chats.py and existing tests/test_auth.py,
 test_persistence.py, test_triage.py and test_visits.py.
+
+## 20. Slice 6 implementation and verification (2026-10-26)
+
+- [x] Record the approved contract before application changes; add only the five approved files in existing folders.
+- [x] Add paired secret-safe admin settings, startup hashing/seeding, reserved usernames and required unique synthetic license numbers.
+- [x] Add atomic schema-v7 users rebuild, doctor review columns/license index and review audit; restore foreign keys on success/failure and preserve references/indexes/data.
+- [x] Add role boundaries, doctor status/note projection, guarded review transitions and atomic suspension/visit ending/audit writes.
+- [x] Preserve seed-doctor admin decisions and serialize availability/heartbeat writes with suspension.
+- [x] Add the Persian admin panel, inline notes/counters, status/audit tabs/paging, conflict refresh and visible-tab polling; update login and doctor/patient redirects.
+- [x] Add temporary-database tests for config/seeding, licenses, all transition/role boundaries, audit, suspension/rollback and concurrent/failed migrations; retain all previous tests.
+- [x] Update setup/API/privacy/breaking-change docs; reinstall and verify tests, JavaScript, live routes and automated browser flow.
+
+PowerShell command: .\.venv\Scripts\python.exe -m unittest discover tests
+
+```text
+Before editing:
+Ran 139 tests in 105.796s
+OK
+
+After implementation:
+Ran 155 tests in 115.540s
+OK
+```
+
+The original 139 tests also passed after the initial backend changes. Sixteen
+new tests cover the admin slice, including v6-to-v7 row/link/index preservation,
+foreign-key enforcement/check failure, rollback/retry, equivalent fresh/upgraded
+schemas, concurrent bootstrap/approval and suspension rollback if audit insertion
+fails. All tests use temporary databases and no provider network calls.
+The installed Starlette/httpx deprecation warning remains. A first isolated admin
+test run exposed resource warnings from a double-entered TestClient context;
+the redundant context entry was removed before the final full suite.
+
+.\.venv\Scripts\python.exe -m pip install -e . succeeded:
+Successfully built healthcare-agent; Successfully installed healthcare-agent-0.1.0.
+The previously authorized process-only proxy bypass was restored afterwards;
+no global packages, dependencies or new folders were added. Inline JavaScript
+syntax checks passed for index.html, doctor.html, login.html and admin.html.
+git diff --check passed.
+
+Uvicorn verification set APP_ADMIN_USERNAME=admin_demo and a synthetic 12+
+character APP_ADMIN_PASSWORD, removed APP_DOCTOR_AUTO_VERIFY and used a unique
+temporary APP_DB_PATH without touching existing project databases. The requested
+default-port command reached startup but failed with WinError 10048 because
+port 8000 was already occupied; the existing listener was left alone. The same
+command with --port 8002 started successfully. /health, /docs, /login, /demo,
+/doctor and /admin returned HTTP 200 with the expected content types.
+The temporary port-8002 server was stopped after verification; existing
+listeners were left running.
+
+Browser automation used three separate localhost cookie origins for a synthetic
+doctor, administrator and patient. It verified the required fake-license field,
+pending waiting notice with no patient UI, admin login/role redirect, pending
+count, approval and automatic doctor-dashboard unlock without reloading. After
+an intake/fallback triage and accepted visit, the doctor sent a synthetic message.
+Admin suspension required an inline note and confirmation; a two-character note
+kept confirmation disabled. Suspension displayed the note on the doctor page and
+removed its patient UI, while the patient saw an ended, locked chat with history
+retained. The audit tab showed approval and suspension in newest-first order.
+Admin visits to /demo and /doctor redirected to /admin. A 375-pixel admin view
+wrapped without horizontal overflow; screenshots were inspected and the audit
+proof was saved outside the repo. No browser console errors were observed.
+
+Unverified: a literal manual/private-window walkthrough, real browser hidden-tab
+timing, rejection/reinstatement through the UI, multi-page UI pagination and the
+409 automatic-refresh UI path. Their API contracts are covered by tests where
+applicable. Browser work was automated in isolated cookie origins, not private
+windows. No real credentials, license verification or live provider were used.
+No commit or push. Stop after Slice 6.
+
+Files changed:
+- .env.example, README.md, docs/plan.md and docs/changelog.md.
+- src/app/main.py, core/config.py and core/db.py.
+- src/app/api/admin.py (new), chats.py, demo.py and deps.py.
+- src/app/schemas/admin.py (new) and auth.py.
+- src/app/services/admin.py (new), accounts.py, chats.py, doctors.py and visits.py.
+- src/app/static/admin.html (new), login.html, doctor.html and index.html.
+- tests/test_admin.py (new), helpers.py, test_auth.py, test_chats.py,
+  test_persistence.py and test_triage.py.

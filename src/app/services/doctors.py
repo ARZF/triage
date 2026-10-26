@@ -26,11 +26,11 @@ def seed_doctors() -> None:
     with closing(db.connect()) as connection, connection:
         for doctor in load_doctors()["doctors"]:
             connection.execute(
-                """INSERT INTO doctors(id, name_fa, specialty_code, expertise, score, verified, created_at)
-                   VALUES (:id, :name_fa, :specialty_code, :expertise, :score, 1, :created_at)
+                """INSERT INTO doctors(id, name_fa, specialty_code, expertise, score, verified, created_at, review_status)
+                   VALUES (:id, :name_fa, :specialty_code, :expertise, :score, 1, :created_at, 'approved')
                    ON CONFLICT(id) DO UPDATE SET name_fa=excluded.name_fa,
                      specialty_code=excluded.specialty_code, expertise=excluded.expertise,
-                     score=excluded.score, verified=1, last_seen_at=NULL""",
+                     score=excluded.score, last_seen_at=NULL""",
                 {**doctor, "expertise": json.dumps(doctor["expertise"], ensure_ascii=False), "created_at": db.utc_now()},
             )
             if settings.demo_doctor_password:
@@ -79,6 +79,7 @@ def require_doctor(connection, doctor_id: str):
 
 def set_available(doctor_id: str, available: bool) -> dict:
     with closing(db.connect()) as connection, connection:
+        connection.execute("BEGIN IMMEDIATE")
         require_doctor(connection, doctor_id)
         connection.execute("UPDATE doctors SET available=? WHERE id=?", (available, doctor_id))
     return {"available": available}
