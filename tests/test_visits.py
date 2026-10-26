@@ -77,7 +77,7 @@ class VisitTests(unittest.TestCase):
             self.assertIsNone(item["previous_visits"])
             self.assertIsNone(item["ai"])
             self.assertEqual(item["preview"], {"age": 30, "symptoms": "cough", "duration": "two days", "severity": 3})
-            self.assertEqual(set(item), {"id","status","created_at","specialty","urgency","preview","patient","previous_visits","ai"})
+            self.assertEqual(set(item), {"id","status","created_at","specialty","urgency","preview","patient","previous_visits","ai","ended"})
             self.assertNotIn("doctor_note_marker", json.dumps(item))
         barrier = Barrier(2)
         def accept(index):

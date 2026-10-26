@@ -133,7 +133,31 @@
       #status { max-width: 50%; text-align: end; }
       .bubble { max-width: 96%; }
     }
-  </style>
+/* Visit chat: scoped styles keep intake controls and dashboard refreshes independent. */
+.visit-chat {margin-top:16px;border-top:1px solid var(--line);padding-top:12px;min-width:0;}
+.visit-chat summary {cursor:pointer;min-height:44px;font-weight:650;}
+.visit-chat-banner,.visit-chat-note {padding:12px;border:1px solid var(--line);border-radius:8px;background:var(--tint);color:var(--ink);font-size:14px;overflow-wrap:anywhere;}
+.visit-chat-log {height:280px;overflow-y:auto;overscroll-behavior:contain;border:1px solid var(--line);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:12px;}
+.visit-chat-message {align-self:flex-start;max-width:90%;flex-shrink:0;border-radius:10px;padding:10px 12px;background:var(--tint);color:var(--ink);min-width:0;}
+.visit-chat-message.own {align-self:flex-end;background:var(--accent);color:var(--surface);}
+.visit-chat-message p {margin:4px 0;white-space:pre-wrap;overflow-wrap:anywhere;}
+.visit-chat-message small,.visit-chat-message time {font-size:12px;display:block;}
+.visit-chat label {display:block;margin:12px 0 8px;font-size:14px;}
+.visit-chat textarea {font:inherit;width:100%;min-width:0;min-height:96px;resize:vertical;border:1px solid var(--line);border-radius:8px;padding:12px;background:var(--surface);color:var(--ink);}
+.visit-chat-actions {display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-top:8px;}
+.visit-chat-count {font-size:13px;color:var(--muted);}
+.visit-chat button {font:inherit;min-height:44px;padding:8px 12px;border:1px solid var(--accent);border-radius:6px;background:var(--accent);color:var(--surface);cursor:pointer;white-space:nowrap;}
+.visit-chat .visit-chat-secondary {background:var(--surface);color:var(--accent);margin-top:8px;}
+.visit-chat button:disabled,.visit-chat textarea:disabled {opacity:.6;cursor:not-allowed;}
+.visit-chat-error {color:var(--danger);font-size:14px;overflow-wrap:anywhere;white-space:pre-wrap;}
+.visit-chat-error:empty {display:none;}
+.visit-chat-end {padding:12px;border:1px solid var(--line);border-radius:8px;margin-top:8px;}
+.visit-chat-end button {margin:4px;}
+.visit-chat textarea[aria-invalid="true"] {border-color:var(--danger);}
+.visit-chat :focus-visible {outline:3px solid var(--accent);outline-offset:3px;}
+@media(max-width:480px){.visit-chat-log{height:240px;}.visit-chat-message{max-width:96%;}.visit-chat-end button{margin-inline:0;}}
+
+</style>
 </head>
 <body>
   <div class="banner">نسخهٔ نمایشی — فقط داده‌های ساختگی</div>
@@ -200,6 +224,138 @@
     <footer>این دموی آزمایشی تشخیص یا درمان ارائه نمی‌کند. فقط از اطلاعات ساختگی استفاده کنید. حذف حساب، اطلاعات و درخواست‌های شما را پاک می‌کند.</footer>
   </div>
   <script>
+
+// ponytail: mirrored inline on two self-contained pages; extract a shared asset when a static-asset route is approved.
+function createVisitChat(requestId, role, initiallyEnded) {
+  const panel=document.createElement("details"), summary=document.createElement("summary");
+  panel.className="visit-chat"; panel.dataset.chatId=requestId;
+  summary.textContent=role==="patient"?"گفت‌وگو با پزشک":"گفت‌وگو با بیمار";
+  const banner=document.createElement("p"); banner.className="visit-chat-banner";
+  banner.textContent="این گفتگو برای موارد اورژانسی نیست؛ در شرایط اورژانسی با خدمات اورژانس تماس بگیرید";
+  const log=document.createElement("div"); log.className="visit-chat-log"; log.setAttribute("role","log"); log.setAttribute("aria-live","polite"); log.setAttribute("aria-label","پیام‌های ویزیت"); log.tabIndex=0;
+  const note=document.createElement("p"), error=document.createElement("p"), label=document.createElement("label");
+  note.className="visit-chat-note"; note.setAttribute("role","status");
+  error.className="visit-chat-error"; error.setAttribute("role","alert"); error.id="visit-error-"+requestId;
+  const input=document.createElement("textarea"); input.id="visit-input-"+requestId; input.rows=3; input.dir="auto"; input.autocomplete="off";
+  input.placeholder="پیام ساختگی خود را بنویسید..."; label.htmlFor=input.id; label.textContent="پیام شما";
+  const counter=document.createElement("span"); counter.id="visit-count-"+requestId; counter.className="visit-chat-count";
+  input.setAttribute("aria-describedby",counter.id+" "+error.id);
+  const send=document.createElement("button"); send.type="button"; send.textContent="ارسال پیام";
+  const actions=document.createElement("div"); actions.className="visit-chat-actions"; actions.append(counter,send);
+  panel.append(summary,banner,log,note,label,input,actions,error);
+  let ended=Boolean(initiallyEnded), full=false, unavailable=false, sending=false, ending=false, reading=false, cursor=0, timer=null, failures=0, endedHistoryLoaded=false;
+  const seen=new Set(), messageNodes=new Map();
+  const endButton=document.createElement("button"), confirmation=document.createElement("div"), endYes=document.createElement("button"), endNo=document.createElement("button");
+  if(role==="doctor"){
+    endButton.type=endYes.type=endNo.type="button"; endButton.textContent="پایان ویزیت"; endButton.className="visit-chat-secondary";
+    confirmation.hidden=true; confirmation.className="visit-chat-end";
+    const question=document.createElement("p"); question.textContent="با پایان ویزیت، ارسال پیام برای هر دو طرف بسته می‌شود. ویزیت پایان یابد؟";
+    endYes.textContent="تأیید پایان ویزیت"; endNo.textContent="انصراف"; endNo.className="visit-chat-secondary";
+    confirmation.append(question,endYes,endNo); panel.append(endButton,confirmation);
+    endButton.addEventListener("click",()=>{confirmation.hidden=false;endYes.focus();});
+    endNo.addEventListener("click",()=>{confirmation.hidden=true;endButton.focus();});
+    endYes.addEventListener("click",async()=>{
+      if(ending||sending||ended)return;
+      ending=true;error.textContent="";controls();
+      try{await call("/end","POST");setEnded(true);confirmation.hidden=true;await poll();}
+      catch(reason){showError(reason);}
+      finally{ending=false;controls();}
+    });
+  }
+  function controls(){
+    const locked=ended||full||unavailable||sending||ending;
+    const length=[...input.value.trim()].length;
+    input.disabled=locked;send.disabled=locked||!length||length>2000;
+    send.textContent=sending?"در حال ارسال...":"ارسال پیام";
+    counter.textContent=length.toLocaleString("fa-IR")+" / ۲۰۰۰";
+    input.setAttribute("aria-invalid",String(length>2000));
+    note.hidden=!ended&&!full;
+    note.textContent=ended?"این ویزیت پایان یافته است. ارسال پیام بسته است؛ تاریخچهٔ گفتگو همچنان قابل مشاهده است.":full?"ظرفیت ۵۰۰ پیام این گفتگو تکمیل شده است. تاریخچه قابل مشاهده است.":"";
+    endButton.hidden=ended;endButton.disabled=unavailable||sending||ending;endYes.disabled=endNo.disabled=sending||ending;
+    panel.setAttribute("aria-busy",String(sending||ending));
+    summary.textContent=(role==="patient"?"گفت‌وگو با پزشک":"گفت‌وگو با بیمار")+(ended?" · پایان‌یافته":"");
+  }
+  function setEnded(value){ended=ended||Boolean(value);if(ended)confirmation.hidden=true;controls();}
+  function active(){return panel.open&&!document.hidden&&panel.isConnected&&panel.getClientRects().length>0&&!unavailable;}
+  function pause(){clearTimeout(timer);timer=null;}
+  function schedule(delay=failures>=2?10000:3000){pause();if(active()&&(!ended||!endedHistoryLoaded))timer=setTimeout(poll,delay);}
+  async function call(suffix,method="GET",body){
+    const response=await fetch("/v1/visit-requests/"+encodeURIComponent(requestId)+suffix,{
+      method,credentials:"same-origin",headers:body?{"Content-Type":"application/json"}:{},
+      body:body?JSON.stringify(body):undefined,signal:AbortSignal.timeout(10000)
+    });
+    if(response.status===401){location.replace("/login");throw Object.assign(Error(),{status:401});}
+    if(!response.ok){
+      let code;try{code=(await response.json()).error?.code;}catch{}
+      throw Object.assign(Error(),{status:response.status,code});
+    }
+    return response.json();
+  }
+  function showError(reason,posting=false){
+    if(reason.status===401)return;
+    if(reason.status===404){unavailable=true;pause();}
+    if(reason.code==="visit_ended")setEnded(true);
+    if(reason.code==="chat_full")full=true;
+    error.textContent=reason.status===404?"این گفتگو در دسترس نیست."
+      :reason.code==="visit_ended"?"ویزیت پایان یافته است؛ ارسال پیام ممکن نیست."
+      :reason.code==="chat_full"?"ظرفیت ۵۰۰ پیام گفتگو تکمیل شده است."
+      :reason.status===422?"پیام باید بین ۱ تا ۲۰۰۰ نویسه باشد."
+      :posting?"ارسال تأیید نشد؛ ممکن است پیام ثبت شده باشد. متن حفظ شده است؛ تاریخچه را بررسی کنید و در صورت نیاز دوباره بفرستید."
+      :"ارتباط برقرار نشد. دریافت پیام‌ها به‌طور خودکار دوباره انجام می‌شود.";
+    controls();
+  }
+  function append(message){
+    if(seen.has(message.id))return;
+    const follow=log.scrollHeight-log.scrollTop-log.clientHeight<64||message.sender===role;
+    const node=document.createElement("article");node.className="visit-chat-message"+(message.sender===role?" own":"");
+    const who=document.createElement("small"), text=document.createElement("p"), time=document.createElement("time");
+    who.textContent=message.sender===role?"شما":message.sender==="doctor"?"پزشک":"بیمار";
+    text.textContent=message.content;text.dir="auto";
+    time.dateTime=message.created_at;time.textContent=new Date(message.created_at).toLocaleString("fa-IR");
+    node.append(who,text,time);
+    const next=[...messageNodes.keys()].sort((a,b)=>a-b).find(id=>id>message.id);
+    log.insertBefore(node,next===undefined?null:messageNodes.get(next));messageNodes.set(message.id,node);seen.add(message.id);
+    if(seen.size>=500)full=true;
+    if(follow)log.scrollTop=log.scrollHeight;
+  }
+  async function poll(){
+    pause();if(!active()||reading)return;
+    reading=true;
+    try{
+      let more;
+      do{
+        const page=await call("/messages?after="+cursor+"&limit=100");
+        for(const message of page.messages)append(message);
+        if(page.messages.length)cursor=page.messages[page.messages.length-1].id;
+        setEnded(page.ended);more=page.has_more;
+        endedHistoryLoaded=page.ended&&!more;
+      }while(more&&active());
+      failures=0;error.textContent="";controls();
+    }catch(reason){failures++;showError(reason);}
+    finally{reading=false;schedule();}
+  }
+  async function post(){
+    const content=input.value.trim();
+    if(sending||ending||ended||full||unavailable||!content||[...content].length>2000)return;
+    sending=true;error.textContent="";controls();
+    try{
+      const message=await call("/messages","POST",{content});
+      append(message);input.value="";failures=0;await poll();
+    }catch(reason){
+      // ponytail: POST timeouts have ambiguous outcomes; add idempotency keys before automatic message resending.
+      showError(reason,true);schedule();
+    }finally{sending=false;controls();}
+  }
+  input.addEventListener("input",controls);
+  input.addEventListener("keydown",event=>{if(event.key==="Enter"&&!event.shiftKey&&!event.isComposing){event.preventDefault();post();}});
+  send.addEventListener("click",post);
+  panel.addEventListener("toggle",()=>{if(panel.open)poll();else pause();});
+  const visibility=()=>{if(document.hidden)pause();else poll();};
+  document.addEventListener("visibilitychange",visibility);
+  controls();
+  return {element:panel,list:log,setEnded,resume:()=>schedule(0),dispose:()=>{pause();document.removeEventListener("visibilitychange",visibility);}};
+}
+
     const input = document.getElementById("message");
     const contextInput = document.getElementById("patient-context");
     const noteHelp = document.getElementById("note-help");
@@ -273,7 +429,7 @@
       reset.disabled = busy || visitBusy;
       deleteAccount.disabled = busy || visitBusy;
       logout.disabled = busy || visitBusy;
-      ownRequestList.querySelectorAll("button").forEach(button=>button.disabled=busy||visitBusy);
+      ownRequestList.querySelectorAll("[data-request-action]").forEach(button=>button.disabled=busy||visitBusy);
       if (confirmationCard) {
         confirmationCard.setAttribute("aria-busy", String(busy));
         confirmationCard.querySelectorAll("button").forEach(button => button.disabled = locked || Boolean(editingField));
@@ -341,6 +497,8 @@
     const requestsError = document.getElementById("requests-error");
     let lastTriage = null, ownRequests = [], visitBusy = false, requestsLoading = false, requestsTimer = null;
     const requestSessions = new Map();
+    const visitChats = new Map();
+    let requestsSnapshot = null;
     function doctorCard(doctor) {
       const card = document.createElement("article");card.className = "doctor-card";
       const name = document.createElement("h3");name.textContent = doctor.name_fa;
@@ -368,6 +526,12 @@
       requestsLoading=true;
       try {
         ownRequests=await request("/v1/visit-requests",undefined,"GET");
+        const snapshot=JSON.stringify(ownRequests);
+        if(snapshot===requestsSnapshot){updateVisitButton();return;}
+        requestsSnapshot=snapshot;
+        const focused=document.activeElement;
+        const positions=[...visitChats.values()].map(chat=>[chat,chat.list.scrollTop]);
+        for(const [id,chat] of visitChats){if(!ownRequests.some(item=>item.id===id&&item.status==="accepted")){chat.dispose();visitChats.delete(id);}}
         ownRequestList.replaceChildren();requestsError.textContent="";
         if (!ownRequests.length) {const empty=document.createElement("p");empty.textContent="درخواستی ثبت نشده است.";ownRequestList.append(empty);}
         const labels={pending:"در انتظار پذیرش پزشک",accepted:"پذیرفته‌شده",cancelled:"لغوشده",expired:"مهلت درخواست تمام شده است"};
@@ -377,6 +541,7 @@
           const status=document.createElement("p");status.className="chip";status.textContent=labels[item.status];card.append(heading,status);
           if (item.status==="pending") {
             const cancel=document.createElement("button");cancel.type="button";cancel.textContent="لغو درخواست";cancel.disabled=visitBusy;
+            cancel.dataset.requestAction="cancel";
             cancel.addEventListener("click",async()=>{
               if(visitBusy)return;visitBusy=true;controls();
               try{await request("/v1/visit-requests/"+encodeURIComponent(item.id)+"/cancel");}
@@ -385,13 +550,21 @@
             });card.append(cancel);
           }
           if (item.doctor) card.append(doctorCard(item.doctor));
+          if(item.status==="accepted"){
+            if(!visitChats.has(item.id))visitChats.set(item.id,createVisitChat(item.id,"patient",item.ended));
+            const chat=visitChats.get(item.id);chat.setEnded(item.ended);card.append(chat.element);
+          }
           if (["expired","cancelled"].includes(item.status)) {
             const again=document.createElement("button");again.type="button";
+            again.dataset.requestAction="again";
             again.textContent=requestSessions.has(item.id)?"درخواست دوباره":"ارزیابی تازه و درخواست دوباره";
             again.addEventListener("click",()=>{if(requestSessions.has(item.id))requestVisit(requestSessions.get(item.id));else start();});card.append(again);
           }
           ownRequestList.append(card);
         }
+        for(const [chat,position] of positions){if(chat.element.isConnected)chat.list.scrollTop=position;}
+        for(const chat of visitChats.values())chat.resume();
+        if(focused?.isConnected&&focused.closest(".visit-chat"))focused.focus({preventScroll:true});
         updateVisitButton();
       } catch {requestsError.textContent="دریافت درخواست‌ها انجام نشد. دوباره تلاش می‌شود.";}
       finally {

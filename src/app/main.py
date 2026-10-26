@@ -16,6 +16,7 @@ from app.core.logging_config import configure_logging, disable_access_logging
 from app.api.patients import router as patient_router
 from app.api.auth import router as auth_router
 from app.api.visits import router as visit_router
+from app.api.chats import router as visit_chat_router
 from app.services.doctors import seed_doctors
 
 settings = Settings()
@@ -41,6 +42,7 @@ app.include_router(dictionary_router)
 app.include_router(patient_router)
 app.include_router(auth_router)
 app.include_router(visit_router)
+app.include_router(visit_chat_router)
 register_exception_handlers(app)
 
 

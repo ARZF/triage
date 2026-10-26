@@ -76,7 +76,7 @@ class PersistenceTests(unittest.TestCase):
             for value in (row["created_at"], row["updated_at"], messages[0]["created_at"]):
                 self.assertEqual(datetime.fromisoformat(value).utcoffset(), timedelta(0))
             self.assertEqual(connection.execute("PRAGMA foreign_keys").fetchone()[0], 1)
-            self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 5)
+            self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 6)
 
     def test_returning_profile_yes_prefills_and_skips_questions(self):
         first = self.complete(allergies="synthetic allergy")
@@ -330,7 +330,7 @@ class PersistenceTests(unittest.TestCase):
             def migrate(_):
                 with closing(db.connect()) as connection:
                     return connection.execute("PRAGMA user_version").fetchone()[0]
-            self.assertEqual(list(pool.map(migrate, range(2))), [5, 5])
+            self.assertEqual(list(pool.map(migrate, range(2))), [6, 6])
         with closing(db.connect()) as connection:
             for table, count in counts.items():
                 self.assertEqual(connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0], count)
@@ -366,7 +366,7 @@ class PersistenceTests(unittest.TestCase):
                 self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 3)
                 self.assertNotIn("height_cm", {row[1] for row in connection.execute("PRAGMA table_info(sessions)")})
             with closing(db.connect()) as connection:
-                self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 5)
+                self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 6)
 
     def test_new_intake_fields_round_trip_in_history_and_complaint_is_redacted(self):
         state = self.create()
@@ -409,7 +409,7 @@ class PersistenceTests(unittest.TestCase):
             self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 4)
             self.assertNotIn("additional_context", {row[1] for row in connection.execute("PRAGMA table_info(sessions)")})
         with closing(db.connect()) as connection:
-            self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 5)
+            self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 6)
             row = connection.execute("SELECT * FROM sessions WHERE id=?", (state["session_id"],)).fetchone()
             self.assertEqual(row["medications"], "paracetamol")
             self.assertIsNone(row["additional_context"])

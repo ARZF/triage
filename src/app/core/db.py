@@ -106,7 +106,8 @@ def connect() -> sqlite3.Connection:
         connection.execute("PRAGMA foreign_keys=ON")
         connection.execute("PRAGMA secure_delete=ON")
         if connection.execute("PRAGMA user_version").fetchone()[0] < 3:
-            connection.executescript(SCHEMA)
+            # Another first connection may already be migrating; bootstrap must never lower its version.
+            connection.executescript(SCHEMA.replace("PRAGMA user_version=3;", ""))
         if connection.execute("PRAGMA user_version").fetchone()[0] < 5:
             # ponytail: explicit additive SQLite migrations; use versioned migration files/tooling when migrations grow.
             with connection:
@@ -117,7 +118,23 @@ def connect() -> sqlite3.Connection:
                                    ("additional_context", "TEXT")):
                     if name not in columns:
                         connection.execute(f"ALTER TABLE sessions ADD COLUMN {name} {kind}")
-                connection.execute("PRAGMA user_version=5")
+                if connection.execute("PRAGMA user_version").fetchone()[0] < 5:
+                    connection.execute("PRAGMA user_version=5")
+        if connection.execute("PRAGMA user_version").fetchone()[0] < 6:
+            with connection:
+                connection.execute("BEGIN IMMEDIATE")
+                columns = {row["name"] for row in connection.execute("PRAGMA table_info(visit_requests)")}
+                if "ended_at" not in columns:
+                    connection.execute("ALTER TABLE visit_requests ADD COLUMN ended_at TEXT")
+                connection.execute("""CREATE TABLE IF NOT EXISTS visit_messages (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    request_id TEXT NOT NULL REFERENCES visit_requests(id) ON DELETE CASCADE,
+                    sender_role TEXT NOT NULL CHECK (sender_role IN ('patient','doctor')),
+                    content TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                )""")
+                connection.execute("CREATE INDEX IF NOT EXISTS visit_messages_request_id ON visit_messages(request_id, id)")
+                connection.execute("PRAGMA user_version=6")
         return connection
     except BaseException:
         connection.close()

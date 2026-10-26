@@ -1,6 +1,6 @@
 # Healthcare Agent: Implementation Plan and Specification
 
-Status: Slices 1a, 2a, 2b, 3, and 4 approved. Scripted intake, Persian demo, JSON vocabulary matching, and SQLite patient memory, and optional AI specialty triage are in scope; future workflow decisions remain proposals.
+Status: Slices 1a, 2a, 2b, 3, 4 and 5 approved. Scripted intake, vocabulary, SQLite memory, optional specialty triage, accounts, broadcast visits and accepted-visit text chat are implemented; future workflow decisions remain proposals.
 
 ## 1. Purpose
 
@@ -14,9 +14,10 @@ at a time, with an explicit API contract and a runnable check for its behavior.
 - `GET /health` returns HTTP 200 with JSON `{"status": "ok"}`.
 - The health endpoint checks application responsiveness only.
 - FastAPI exposes interactive API documentation at `/docs`.
-- The app implements scripted intake, JSON vocabulary, SQLite patient memory, optional AI specialty triage, demo patient/doctor accounts and broadcast visit requests; no patient-facing diagnosis, direct chat, prescription or appointment scheduling.
+- The app implements scripted intake, JSON vocabulary, SQLite patient memory, optional AI specialty triage, demo accounts, broadcast visits and direct text chat with the accepting doctor; no patient-facing diagnosis, prescription or appointment scheduling.
 - The expanded Persian intake includes height/weight, main complaint, disease/medication histories and food/drug allergies, with multi-item symptom and medicine editors. Schema v4 adds nullable columns without resetting version-3 data.
 - Schema v5 adds optional doctor-only context, explicitly excluded from current/prior provider inputs. Final review is an inline Persian card with validated field-specific corrections before confirmation.
+- Schema v6 adds visit end timestamps and indexed direct messages. Patient request/message polling is read-only; the doctor alone ends an accepted visit without removing its history.
 - `src/app/core/config.py` defines frozen settings read from `os.environ`. `APP_LOG_LEVEL` defaults to `INFO`; INFO, WARNING, ERROR, and CRITICAL are accepted (case insensitive). Invalid values fail startup. The application does not load `.env` files.
 
 ## 3. Project boundaries
@@ -33,6 +34,7 @@ at a time, with an explicit API contract and a runnable check for its behavior.
 - Slice 4 below supersedes earlier slice descriptions for identity, ownership, doctor storage/presence, route/response changes and schema version. Earlier entries remain a historical record. Only src/app/services/ was newly approved.
 - The expanded Persian intake feature below supersedes earlier question orders, returning-profile fields, single-symptom editor behavior and schema version. No additional folders are approved or created.
 - The doctor-only context/inline review feature supersedes the preceding intake's final steps and schema version: optional additional_context precedes confirm; corrections reuse the message route without another endpoint.
+- Slice 5 supersedes earlier direct-chat exclusions, schema version and patient-list expiry writes. It uses only existing approved folders; no folders or dependencies are added.
 
 ## 4. Decisions for persistence and future slices
 
@@ -261,6 +263,23 @@ Complete this section for each agreed feature before writing its code:
 - **Runnable check:** existing intake/API tests and browser selection/custom-entry/correction checks.
 - **Verification (2026-10-26):** .\.venv\Scripts\python.exe -m unittest discover tests -p test_intake.py passed 12 tests; the same command with -p test_chat_api.py passed 13 tests. Browser checks confirmed 221 height choices (30–250) and 300 weight choices (1–300), plus placeholder/custom options; selection requires explicit submission, and custom 170.5/70.2 corrections persist. No browser console errors; git diff --check passed. No new backend behavior, dependencies, folders, commits or pushes.
 
+### Feature: Slice 5 — accepted-visit text chat and doctor-controlled ending
+
+- **Status:** implemented (recorded as approved before application edits).
+- **User outcome:** the patient and accepting doctor exchange synthetic text messages and keep history readable after the doctor ends the visit.
+- **Scope:** no new folders/dependencies; add services/chats.py, api/chats.py and schemas/chats.py. First remove the expiry sweep from patient_requests: pending rows older than the existing cutoff are projected as expired without updating status/updated_at. Keep sweeps on create/cancel/accept/doctor_requests. Chat reads do not sweep or heartbeat.
+- **API contract:** GET /v1/visit-requests/{id}/messages?after=0&limit=50 returns {messages:[{id,sender,content,created_at}],ended,has_more}, ordered ascending with ids > after, limit 1–100; after is a nonnegative SQLite integer. POST the same route with {content:str} returns 201 the created message. Strip before validating 1–2000 characters; forbid extras and derive sender from auth. POST /v1/visit-requests/{id}/end returns {ended:true}, idempotently. PatientVisit/DoctorVisit gain ended; status stays accepted.
+- **Validation:** every chat operation requires an accepted request owned by the patient or assigned to the verified doctor; all other requests/callers receive 404. No cookie -> 401. The end route requires a verified doctor (patient/unverified -> 403), with other verified doctors -> 404. Ended chat POST -> 409 visit_ended; at 500 messages -> 409 chat_full. Existing ErrorResponse/no-store rules apply.
+- **Agent behavior:** direct human text only; no LLM calls or chat content in provider context. INSERT rechecks participation, ended_at and count inside BEGIN IMMEDIATE. End performs a guarded UPDATE for the accepting doctor only where ended_at IS NULL, then re-reads. Reads remain allowed after ending.
+- **Persistence:** atomic, idempotent schema-v6 additive migration checks table_info before adding visit_requests.ended_at, creates visit_messages(id INTEGER PRIMARY KEY AUTOINCREMENT, request_id FK ON DELETE CASCADE, sender_role CHECK patient|doctor, content, created_at) and (request_id,id) index. Fresh/upgraded/concurrent first connections reach the same schema. Patient deletion cascades messages; secure_delete stays enabled.
+- **Demo:** both Persian RTL pages get a chat per accepted request, distinct own/other bubbles, multiline input, character counter and Send. Enter sends; Shift+Enter inserts a newline. No duplicate sends. Fixed banner: «این گفتگو برای موارد اورژانسی نیست؛ در شرایط اورژانسی با خدمات اورژانس تماس بگیرید». Doctor ends through an explicit confirmation step. Ended panels lock inputs and retain history.
+- **Polling/failure behavior:** poll open visible panels every 3 seconds using after, append new ids only and catch up has_more pages. Pause while closed/hidden; fetch immediately on visibility return. Consecutive errors back off to 10 seconds; success restores 3 seconds. Persian errors distinguish 404, visit_ended, chat_full, validation and network failures; 401 redirects to login. Network read failures retry automatically; ambiguous message-send failures preserve the draft and do not resend automatically without an idempotency key. Scroll down only if already near the bottom or the newly displayed message belongs to the caller. Preserve panel/input/scroll state across dashboard/request refreshes.
+- **Access and data handling:** synthetic text only, no message/body/header logging, no other-party usernames/ids or session ids in message responses. textContent only, no CDN. No new retention process or provider integration.
+- **Configuration:** existing auth/SQLite settings only; fixed 500-message ceiling and polling intervals.
+- **Acceptance examples:** accepting doctor/patient exchange messages; another doctor/patient cannot read/post. End is idempotent, both sides see ended and cannot post; history stays readable. Patient polls leave all database rows unchanged. End/post races never insert after the end.
+- **Runnable check:** .\.venv\Scripts\python.exe -m unittest discover tests before/after; migration/authorization/pagination/validation/cap/end/race/read-only/deletion/privacy checks using temporary DBs and patched clocks. Reinstall editable package, run Uvicorn and verify both pages in isolated browser sessions; report manual limits.
+- **NOT implemented:** WebSocket/push, attachments, typing/read receipts, unread counts, moderation/reporting, message editing/deletion, retention, audit log, chat export, doctor-to-doctor transfer.
+
 ## 6. Coding and verification rules
 
 - Trace the affected flow and callers before changing shared behavior.
@@ -316,6 +335,9 @@ current. Report any unverified behavior or remaining limitations explicitly.
 - `src/app/core/logging_config.py`: logging configuration and shared access-log disabling at import and lifespan startup.
 - `src/app/api/health.py`: health endpoint. `chat.py` adds the two /v1/chat POST routes; `demo.py` serves /demo.
 - `src/app/schemas/common.py`: `HealthResponse`, `ErrorResponse`, and its nested error model.
+- `src/app/services/chats.py`, `api/chats.py`, `schemas/chats.py`: accepted-visit participation, message pagination/insertion and doctor-controlled ending; distinct from scripted intake in api/chat.py.
+- `src/app/services/visits.py`, `schemas/visits.py`: read-only patient expiry projection, doctor heartbeat/sweep, broadcast/acceptance and ended visit items.
+- `tests/test_chats.py`: schema-v6 migration, direct-chat access, limits, concurrency, read-only polling and deletion/privacy checks.
 - `tests/test_health.py`: health and settings checks.
 - `tests/test_errors.py`: unknown path, validation privacy, and HTTP exception privacy checks.
 
@@ -657,3 +679,70 @@ Stop after Slice 4.
 - Browser automation verified the optional multiline box, skip, fresh note on a returning visit, grouped summary, editing/cancellation, invalid-answer recovery, symptom-match updates, inert HTML-like text, expandable long notes, confirmed-card collapse and continuing fallback triage. Checked widths 320/375/414/768: no horizontal overflow or clipped button labels; no browser console errors. Screenshot inspected and saved outside the repo.
 - Reused the existing palette/type/spacing through Hallmark at component scope. Text contrast on white: primary/secondary 7.68:1, body 12.08:1, muted 5.69:1, error 7.60:1. No decorative motion added.
 - git diff --check passed. Real provider calls were not made; provider payload exclusion was verified through mocks. No commit or push.
+
+## 19. Slice 5 implementation and verification (2026-10-26)
+
+- [x] Record the approved feature before implementation; reuse existing folders and dependencies.
+- [x] Make patient request expiry a read-only projection and retain mutation/doctor sweeps.
+- [x] Add atomic schema-v6 migration, end timestamps, cascading direct messages and request/id index; keep secure_delete enabled.
+- [x] Add participant-scoped read/post/end contracts, stripped validation, cursor pagination, message cap, guarded ending and ended visit items.
+- [x] Add Persian chat panels, polling/catch-up, read retries/backoff, retained drafts, safe rendering, multiline input and inline doctor end confirmation.
+- [x] Cover migration preservation/concurrent bootstrap/rollback, authorization, pagination, validation, concurrent cap/end, read-only rows, deletion and response/log privacy with temporary-database tests.
+- [x] Reinstall, run the full suite, check JavaScript syntax and live routes, and complete an automated two-account browser walkthrough.
+
+PowerShell command: .\.venv\Scripts\python.exe -m unittest discover tests
+
+```text
+Before editing:
+Ran 127 tests in 94.623s
+OK
+
+Final after editing:
+Ran 139 tests in 102.893s
+OK
+```
+
+The initial post-change run caught an accidentally changed legacy transcript
+count assertion; its original five-message expectation was restored before the
+final passing run. Twelve new tests cover Slice 5. Provider calls are mocked;
+the existing Starlette/httpx deprecation warning remains.
+
+.\.venv\Scripts\python.exe -m pip install -e . completed successfully:
+Successfully built healthcare-agent; Successfully installed healthcare-agent-0.1.0.
+It used the previously approved process-only proxy bypass, then restored the
+previous environment. No dependency or packaging changes were required.
+
+With APP_DOCTOR_AUTO_VERIFY=true and a dedicated temporary synthetic APP_DB_PATH,
+the requested Uvicorn command reached startup but could not bind port 8000
+(WinError 10048: address already in use). The existing listener was left alone.
+Running the same command with --port 8002 succeeded. /health, /docs, /demo and
+/doctor returned HTTP 200. Existing project databases were not opened or reset
+for verification. Access logs remain disabled. The temporary port-8002 server
+was stopped after verification; existing listeners were left running.
+
+Browser automation used separate patient.localhost and doctor.localhost cookie
+origins on that test server. It completed registration, the full synthetic
+intake/fallback triage, broadcast and acceptance; messages arrived in both
+directions within a few seconds. Enter sent, Shift+Enter retained a newline,
+empty Send was disabled, repeated reads did not duplicate messages, and a draft
+survived dashboard refreshes. A closed patient panel retained its old message
+count, then fetched the missing doctor message immediately on reopening.
+Inline end confirmation locked both inputs, retained all three messages and
+showed the Persian read-only note. No browser console errors were observed.
+A 375-pixel doctor view wrapped without horizontal overflow; a screenshot of
+the completed chat was inspected and saved outside the repository.
+
+Unverified browser checks: literal manual/private windows, actual tab-hidden
+visibilitychange pause/resume, network-error retry/backoff timing, full-history
+scroll behavior and patient mobile viewport sizing. The available browser
+controls did not provide isolated private windows or reliable tab-visibility
+simulation. Authorization, read-only behavior and race outcomes are covered by
+API tests; this is not a claim of manual browser verification. No live provider
+was called, and direct chat has no provider integration. No commit or push.
+
+Files changed: README.md, docs/plan.md, docs/changelog.md;
+src/app/main.py, core/db.py, schemas/visits.py, services/visits.py;
+new api/chats.py, schemas/chats.py, services/chats.py;
+static/index.html and static/doctor.html;
+new tests/test_chats.py and existing tests/test_auth.py,
+test_persistence.py, test_triage.py and test_visits.py.

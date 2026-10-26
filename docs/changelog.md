@@ -11,6 +11,13 @@ move them into a dated version section when a release is made.
 
 ### Added
 
+- Slice 5: authenticated patient/accepting-doctor text chat, cursor pagination,
+  a 500-message ceiling and idempotent doctor-controlled visit ending.
+- Persian inline visit-chat panels on both pages, three-second visible-panel
+  polling, read-error backoff, multiline composition and readable ended history.
+- Atomic schema-v6 migration for visit end timestamps and cascading indexed
+  visit messages, with migration, authorization, race and privacy checks.
+
 - Persian height/weight dropdown choices in intake and final-review corrections, retaining custom decimal entry.
 
 - Optional multiline context for the accepting doctor, persisted through schema v5 and excluded from all current/prior provider inputs through an explicit allowlist.
@@ -68,6 +75,12 @@ move them into a dated version section when a release is made.
 - Doctors now come from schema-v3 SQLite rows; doctors.json is seed data without online fields, online presence is computed and scores may be null. Reset the old disposable synthetic database once.
 
 ### Changed
+
+- Patient request polling now projects expired status without writing rows;
+  direct-message reads also leave database rows and doctor presence unchanged.
+- Patient/doctor visit items now expose ended while preserving accepted status.
+- Concurrent database bootstrap and earlier migration steps cannot lower the
+  schema version after another connection has upgraded it.
 
 - Allow validated corrections through optional edit_field on the existing message route during final review only; preserve other answers and refresh matches atomically. Completed sessions remain immutable.
 

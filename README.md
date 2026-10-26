@@ -2,8 +2,8 @@
 
 Synthetic-data FastAPI demo with scripted Persian intake, vocabulary matching,
 optional AI specialty triage, patient/doctor login and broadcast visit requests.
-This is demo-grade authentication. There is no direct chat, prescription,
-appointment booking or admin role.
+Accepted patients and doctors can exchange direct text messages. Authentication
+is demo-grade; there is no prescription, appointment booking or admin role.
 
 ## Setup and the Slice 4 breaking update
 
@@ -18,8 +18,8 @@ For databases from the old anonymous demo only, stop the server and delete the o
 synthetic database once, or select a fresh APP_DB_PATH. Old anonymous visits
 have no account ownership and are not migrated into accounts. Keep any data
 you need before resetting. The application never deletes the database for you.
-Existing Slice 4 (schema-v3) and expanded-intake (schema-v4) databases upgrade automatically to schema v5;
-keep those databases when updating the intake questions.
+Existing schema-v3, v4 and v5 databases upgrade automatically to schema v6;
+keep those databases when updating the intake or adding visit chat.
 
 ```powershell
 # Run once only for the old disposable demo database, with the server stopped:
@@ -53,8 +53,8 @@ private browser sessions and leave their dashboards open. Register a patient
 in another browser session, complete an intake, let triage finish, and press
 the broadcast visit-request button. Both online doctors see the preview.
 The first doctor to accept wins; the other queue clears on its next poll,
-and the patient sees the accepting doctor's card. No communication channel
-is opened in this slice.
+and the patient sees the accepting doctor's card. Open the chat panel on both
+accepted-visit cards to exchange synthetic messages.
 
 The doctor dashboard polls every ten seconds while visible. Polling updates
 its presence heartbeat. Online means verified, available, and seen in the
@@ -136,16 +136,44 @@ online. Use the existing triage refresh/retry control to refresh doctor presence
 
 Request statuses are pending, accepted, cancelled and expired. Patients may
 cancel pending requests only. Pending requests expire after the configured TTL.
-Every visit-request operation sweeps expired pending rows first. Cancelled or
+Create, cancel, accept and doctor-list operations sweep expired pending rows.
+The patient list projects expired status without changing stored rows. Cancelled or
 expired requests allow another request. The patient panel polls every ten
 seconds while a request is pending and the tab is visible. An expired request
 can be retried for the current page's remembered intake; after reloading, the
 page offers a fresh intake because the request-list API does not expose
 session ids. Accepted requests show the accepting doctor's card.
 
-GET /v1/doctor/requests intentionally updates last_seen_at; visit-request GET
-lists can also persist derived expiry. These are the documented GET side effects.
+GET /v1/doctor/requests intentionally updates last_seen_at and sweeps expiry.
+Patient request lists and visit-message reads are read-only.
 No GET accepts/cancels a request, changes availability, logs in or logs out.
+
+## Accepted-visit text chat
+
+Only the owning patient and the verified doctor who accepted the request can
+read or post. Other accounts and non-accepted requests receive 404. The chat
+does not call an LLM or add conversation text to provider context.
+
+Each accepted card has a Persian RTL chat panel with distinct message bubbles,
+a multiline input and a 2000-character counter. Enter sends; Shift+Enter adds a
+newline. Messages are stripped and must contain 1–2000 characters afterwards.
+There is a 500-message limit per visit. Empty, over-limit and pending sends are
+disabled. The emergency-services banner stays above the message history.
+
+Open panels poll every three seconds while the tab is visible, using the last
+message id and fetching further pages when needed. Closed/hidden panels pause;
+reopening or returning to the tab fetches immediately. Consecutive read failures
+back off to ten seconds; success restores three seconds. Reads retry automatically.
+An uncertain send preserves its draft and asks the user to check history before
+resending; automatic POST retries require future idempotency support. Refreshes
+preserve the draft and scroll position. New messages scroll down only when near
+the bottom or when the message is the user's own.
+
+The accepting doctor selects «پایان ویزیت» and confirms inline. Both inputs lock
+and show a read-only note; history remains accessible. Ending is idempotent,
+and status remains accepted with ended=true. Ending does not reopen the intake
+for another request. Posting after ending returns 409 visit_ended; reaching the
+message ceiling returns 409 chat_full.
 
 ## API
 
@@ -176,6 +204,19 @@ Verified doctor role:
 - PUT /v1/doctor/availability {available: bool}.
 - GET /v1/doctor/requests?status=pending|accepted; omitted status returns both.
 - POST /v1/doctor/requests/{id}/accept -> updated item; atomic first acceptance wins.
+
+Accepted patient or accepting verified doctor:
+- GET /v1/visit-requests/{id}/messages?after=0&limit=50 ->
+  {messages: [{id, sender, content, created_at}], ended, has_more}.
+  Ascending ids greater than after; after is a nonnegative SQLite integer,
+  limit is 1–100. Reading remains allowed after ending.
+- POST /v1/visit-requests/{id}/messages {content} -> 201 the created message.
+  Extra fields are forbidden; sender is derived from authentication.
+- POST /v1/visit-requests/{id}/end -> 200 {ended: true}; accepting verified
+  doctor only. Patients/unverified doctors receive 403; other doctors 404.
+
+PatientVisit and DoctorVisit items include ended: bool. Visit-message responses
+contain no other-party username, patient/doctor id or intake session id.
 
 Chat responses contain {session_id, returning, reply, step, done, emergency,
 collected, matched}; patient_id has been removed. The old patient-id creation
@@ -238,12 +279,14 @@ Doctor-only AI summary/considerations are never in patient triage responses.
 
 ## Storage, vocabulary and demo limits
 
-SQLite schema version 5 keeps the version-3 accounts/doctor/request tables,
-the six expanded-intake columns and a nullable additional_context column through
-atomic, version-gated additive migrations.
+SQLite schema version 6 keeps the accounts, expanded intake and optional context,
+adds nullable visit_requests.ended_at and an indexed visit_messages table through
+atomic, version-gated additive migrations. Patient deletion cascades through
+visit requests to direct messages. Fresh and upgraded databases have the same
+structure, including concurrent first connections.
 Existing accounts, visits and messages are preserved; previously unanswered
-fields remain null. This upgrade does not require deleting a version-3 or version-4 database.
-Connections enable foreign keys and secure_delete; normal version-5 connections
+fields remain null. This upgrade does not require deleting a version-3, v4 or v5 database.
+Connections enable foreign keys and secure_delete; normal version-6 connections
 skip schema writes. Connections close explicitly; message and acceptance
 transactions are short. Explicit SQLite migrations cover these additions; use dedicated
 migration tooling when migrations grow. SQLite files/journals are ignored by Git.
@@ -263,11 +306,15 @@ AI considerations are generated, unverified and doctor-only.
 
 NOT implemented: admin approval of doctors, doctor credential checks, doctor
 account deletion, ratings/reviews, password reset, email verification, MFA,
-audit log, general rate limiting, HTTPS enforcement, direct chat, prescriptions
+audit log, general rate limiting, HTTPS enforcement, prescriptions
 or appointment scheduling. Retention is manual deletion only. Expired auth
 sessions are rejected; no scheduled token cleanup, backup or general migration framework
 is provided. Never commit real secrets. Usernames, passwords, tokens, cookies,
 request bodies and headers are not logged; Uvicorn access logs stay disabled.
+
+Chat features NOT implemented: WebSocket/push, attachments, typing and read
+receipts, unread counts, moderation or reporting, message editing/deletion,
+retention, audit log, chat export and doctor-to-doctor transfer.
 
 Symptoms/medicines remain validated JSON starter catalogs, not clinically
 reviewed. Codes are unique lowercase slugs; names/aliases must be non-empty.
@@ -281,10 +328,10 @@ phrases and preserves first-appearance order. Catalog search uses substrings.
 - src/app/main.py: lifespan, routers, logging and no-store middleware.
 - src/app/core/: settings, SQLite, security, provider client and errors.
 - src/app/agent/: intake, sessions, vocabulary, bounded context and triage.
-- src/app/services/accounts.py, doctors.py, visits.py: accounts, presence,
-  seeding, broadcast and acceptance.
+- src/app/services/accounts.py, doctors.py, visits.py, chats.py: accounts,
+  presence, seeding, broadcast, acceptance, direct messages and visit ending.
 - src/app/api/: auth, dependencies, chat, owned patient routes, catalogs,
-  doctor/request routes and static pages.
+  doctor/request routes, accepted-visit chats.py and static pages.
 - src/app/schemas/: explicit request/response models.
 - src/app/data/: starter vocabulary and seed doctors.
 - src/app/static/: self-contained index.html, login.html and doctor.html.

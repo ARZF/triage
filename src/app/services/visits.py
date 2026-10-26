@@ -32,6 +32,7 @@ def _patient_item(connection, row) -> dict:
         "id": row["id"], "status": row["status"], "created_at": row["created_at"],
         "specialty": doctors.specialty(row["specialty_code"]),
         "doctor": doctors.public_doctor(doctor) if doctor else None,
+        "ended": row["ended_at"] is not None,
     }
 
 
@@ -68,12 +69,14 @@ def create(patient_id: str, session_id: str) -> dict:
 
 
 def patient_requests(patient_id: str) -> list[dict]:
-    expire_requests()
+    cutoff = _cutoff(db.utc_now())
     with closing(db.connect()) as connection:
         rows = connection.execute(
             "SELECT * FROM visit_requests WHERE patient_id=? ORDER BY created_at DESC, rowid DESC", (patient_id,)
         ).fetchall()
-        return [_patient_item(connection, row) for row in rows]
+        return [{**_patient_item(connection, row),
+                 "status": "expired" if row["status"] == "pending" and row["created_at"] < cutoff else row["status"]}
+                for row in rows]
 
 
 def cancel(patient_id: str, request_id: str) -> dict:
@@ -99,6 +102,7 @@ def _doctor_item(connection, row, doctor_id: str) -> dict:
     return {
         "id": row["id"], "status": row["status"], "created_at": row["created_at"],
         "specialty": doctors.specialty(row["specialty_code"]),
+        "ended": row["ended_at"] is not None,
         "urgency": triage["urgency"] if triage else "unknown",
         "preview": {name: session[name] for name in ("age", "symptoms", "duration", "severity")},
         "patient": context["current"] if context else None,

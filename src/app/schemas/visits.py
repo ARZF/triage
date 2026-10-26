@@ -24,6 +24,7 @@ class VisitDoctor(BaseModel):
 
 class PatientVisit(BaseModel):
     id: str
+    ended: bool
     status: Literal["pending", "accepted", "cancelled", "expired"]
     created_at: str
     specialty: Specialty
@@ -69,6 +70,7 @@ class DoctorAI(BaseModel):
 
 class DoctorVisit(BaseModel):
     id: str
+    ended: bool
     status: Literal["pending", "accepted", "cancelled", "expired"]
     created_at: str
     specialty: Specialty
