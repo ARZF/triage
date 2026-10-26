@@ -1,8 +1,9 @@
 from typing import Literal
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response
 
-from app.api.deps import patient_user, verified_doctor
+from app.api.deps import doctor_user, no_body, patient_user, verified_doctor
+from app.schemas.auth import DoctorProfile, DoctorProfilePatch
 from app.schemas.common import ErrorResponse
 from app.schemas.visits import Availability, DoctorVisit, PatientVisit, VisitRequest
 from app.services import doctors, visits
@@ -40,3 +41,19 @@ def doctor_requests(status: Literal["pending", "accepted"] | None = None, user: 
 @router.post("/doctor/requests/{request_id}/accept", response_model=DoctorVisit)
 def accept_request(request_id: str, user: dict = Depends(verified_doctor)) -> dict:
     return visits.accept(user["doctor_id"], request_id)
+
+
+@router.post("/doctor/heartbeat", status_code=204, dependencies=[Depends(no_body)])
+def heartbeat(user: dict = Depends(verified_doctor)) -> Response:
+    visits.heartbeat(user["doctor_id"])
+    return Response(status_code=204)
+
+
+@router.get("/doctor/profile", response_model=DoctorProfile)
+def doctor_profile(user: dict = Depends(doctor_user)) -> dict:
+    return doctors.profile(user["doctor_id"])
+
+
+@router.patch("/doctor/profile", response_model=DoctorProfile)
+def update_doctor_profile(body: DoctorProfilePatch, user: dict = Depends(doctor_user)) -> dict:
+    return doctors.update_profile(user["doctor_id"], body.model_dump(exclude_unset=True))

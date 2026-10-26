@@ -221,3 +221,47 @@ window.VisitThread = function(options) {
   poll();
   return {element:panel,list:log,setEnded,resume:()=>schedule(0),dispose:()=>{disposed=true;pause();document.removeEventListener("visibilitychange",visibility);panel.remove();log.remove();}};
 }
+
+// Shared form plumbing; page callers own profile fields, routes and role decisions.
+window.ProfileRequest = async function(path,body,method="GET") {
+  const response=await fetch(path,{method,credentials:"same-origin",headers:body?{"Content-Type":"application/json"}:{},body:body?JSON.stringify(body):undefined,signal:AbortSignal.timeout(10000)});
+  if(!response.ok){let code;try{code=(await response.json()).error?.code;}catch{}throw Object.assign(Error("request"),{status:response.status,code,retryAfter:response.headers.get("Retry-After")});}
+  return response.status===204?null:response.json();
+};
+window.ProfileField = function(form,id,labelText,{multiline=false,select=false,password=false,autocomplete="off"}={}) {
+  const row=document.createElement("div"),label=document.createElement("label"),input=document.createElement(select?"select":multiline?"textarea":"input"),error=document.createElement("p");
+  label.htmlFor=id;label.textContent=labelText;input.id=id;input.name=id;input.dir="auto";input.autocomplete=autocomplete;
+  if(password)input.type="password";
+  error.id=id+"-error";error.className="field-error";error.setAttribute("role","alert");input.setAttribute("aria-describedby",error.id);
+  row.className="profile-field";row.append(label,input,error);form.append(row);
+  return {input,error,invalid(text){error.textContent=text;input.setAttribute("aria-invalid",String(Boolean(text)));}};
+};
+window.PasswordForm = function(root) {
+  const heading=document.createElement("h2"),form=document.createElement("form"),message=document.createElement("p"),managed=document.createElement("p");
+  heading.textContent="تغییر گذرواژه";form.noValidate=true;message.setAttribute("role","status");managed.hidden=true;managed.className="muted";
+  const current=ProfileField(form,"current-password","گذرواژهٔ فعلی",{password:true,autocomplete:"current-password"});
+  const next=ProfileField(form,"new-password","گذرواژهٔ جدید",{password:true,autocomplete:"new-password"});
+  const confirm=ProfileField(form,"confirm-password","تکرار گذرواژهٔ جدید",{password:true,autocomplete:"new-password"});
+  for(const field of [current,next,confirm])field.input.maxLength=128;
+  const send=document.createElement("button");send.type="submit";send.textContent="ذخیرهٔ گذرواژه";form.append(send,message);root.append(heading,managed,form);let busy=false;
+  form.addEventListener("submit",async event=>{
+    event.preventDefault();if(busy)return;message.textContent="";
+    current.invalid(current.input.value?"":"گذرواژهٔ فعلی را وارد کنید.");
+    const length=[...next.input.value].length;
+    next.invalid(length<8||length>128?"گذرواژه باید ۸ تا ۱۲۸ نویسه باشد.":next.input.value===current.input.value?"گذرواژهٔ جدید باید متفاوت باشد.":"");
+    confirm.invalid(next.input.value!==confirm.input.value?"تکرار گذرواژه با گذرواژهٔ جدید یکسان نیست.":"");
+    if([current,next,confirm].some(field=>field.error.textContent)){[current,next,confirm].find(field=>field.error.textContent).input.focus();return;}
+    busy=true;send.disabled=true;form.setAttribute("aria-busy","true");
+    try{
+      await ProfileRequest("/v1/me/password",{current_password:current.input.value,new_password:next.input.value},"POST");
+      form.reset();message.className="success";message.textContent="گذرواژه تغییر کرد؛ دستگاه‌های دیگر از حساب خارج شدند. این نشست همچنان فعال است.";
+    }catch(error){
+      message.className="error";
+      if(error.code==="password_managed"){form.reset();form.hidden=true;managed.hidden=false;managed.textContent="گذرواژهٔ این حساب از تنظیمات سرور مدیریت می‌شود و در این صفحه قابل تغییر نیست.";}
+      else if(error.code==="invalid_current_password")current.invalid("گذرواژهٔ فعلی درست نیست.");
+      else if(error.status===401)location.replace("/login");
+      else if(error.status===429)message.textContent="تلاش‌های ناموفق زیاد بوده است. "+Number(error.retryAfter||900).toLocaleString("fa-IR")+" ثانیه بعد دوباره امتحان کنید.";
+      else message.textContent=error.status===422?"اطلاعات گذرواژه را بررسی کنید؛ گذرواژهٔ جدید باید متفاوت و ۸ تا ۱۲۸ نویسه باشد.":"تغییر گذرواژه تأیید نشد. اتصال و وضعیت ورود را بررسی کنید؛ دوباره به‌طور خودکار ارسال نمی‌شود.";
+    }finally{busy=false;send.disabled=false;form.setAttribute("aria-busy","false");}
+  });
+};

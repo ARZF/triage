@@ -73,6 +73,7 @@ function doctorCard(doctor){
   paragraph(card,doctor.specialty.name_fa);
   const tags=document.createElement("div");for(const phrase of doctor.expertise){const chip=document.createElement("span");chip.className="chip";chip.textContent=phrase;tags.append(chip);}card.append(tags);
   for(const [label,text] of [["شماره نظام پزشکی",doctor.license_number||"دادهٔ اولیه؛ بدون شماره نظام پزشکی"],["تاریخ ثبت‌نام",new Date(doctor.registered_at).toLocaleString("fa-IR")],["وضعیت",statusNames[doctor.status]],["آخرین بررسی",doctor.reviewed_at?new Date(doctor.reviewed_at).toLocaleString("fa-IR"):"هنوز بررسی نشده"]]){const field=document.createElement("div"),term=document.createElement("dt"),value=document.createElement("dd");term.textContent=label;value.textContent=text;field.append(term,value);details.append(field);}card.append(details);
+  if(doctor.status==="pending"&&doctor.resubmitted_at)paragraph(card,"ارسال مجدد پس از تغییر مشخصات · "+new Date(doctor.resubmitted_at).toLocaleString("fa-IR"),"chip");
   if(doctor.review_note)paragraph(card,"یادداشت مدیر: "+doctor.review_note);
   actions.className="actions";
   const allowed=doctor.status==="approved"?["suspend"]:doctor.status==="pending"?["approve","reject"]:["approve"];

@@ -184,6 +184,28 @@ def connect() -> sqlite3.Connection:
                         connection.execute("PRAGMA user_version=7")
             finally:
                 connection.execute("PRAGMA foreign_keys=ON")
+        if connection.execute("PRAGMA user_version").fetchone()[0] < 8:
+            from app.agent.intake import PROFILE_FIELDS
+            with connection:
+                connection.execute("BEGIN IMMEDIATE")
+                if connection.execute("PRAGMA user_version").fetchone()[0] < 8:
+                    connection.execute("""CREATE TABLE IF NOT EXISTS patient_profiles (
+                        patient_id TEXT PRIMARY KEY REFERENCES patients(id) ON DELETE CASCADE,
+                        age INTEGER, height_cm REAL, weight_kg REAL, medical_history TEXT,
+                        medications TEXT, medication_history TEXT, food_allergies TEXT, allergies TEXT,
+                        medication_codes TEXT NOT NULL DEFAULT '[]', updated_at TEXT NOT NULL
+                    )""")
+                    fields = ','.join(PROFILE_FIELDS)
+                    complete = ' AND '.join(f'latest.{name} IS NOT NULL' for name in PROFILE_FIELDS)
+                    connection.execute(f"""INSERT INTO patient_profiles(patient_id,{fields},medication_codes,updated_at)
+                        SELECT s.patient_id,{','.join('s.' + name for name in PROFILE_FIELDS)},s.medication_codes,s.updated_at
+                        FROM sessions s WHERE s.rowid=(SELECT latest.rowid FROM sessions latest
+                            WHERE latest.patient_id=s.patient_id AND latest.done=1 AND latest.emergency=0 AND {complete}
+                            ORDER BY latest.updated_at DESC,latest.created_at DESC,latest.rowid DESC LIMIT 1)
+                        ON CONFLICT(patient_id) DO NOTHING""")
+                    if "resubmitted_at" not in {row["name"] for row in connection.execute("PRAGMA table_info(doctors)")}:
+                        connection.execute("ALTER TABLE doctors ADD COLUMN resubmitted_at TEXT")
+                    connection.execute("PRAGMA user_version=8")
         return connection
     except BaseException:
         connection.close()

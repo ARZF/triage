@@ -6,6 +6,8 @@ from datetime import datetime, timedelta
 from uuid import uuid4
 
 from app.agent.doctors import load_doctors
+from app.agent.intake import PROFILE_FIELDS
+from app.agent.dictionaries import match
 from app.core import db, security
 from app.core.config import Settings
 from app.core.errors import ServiceError
@@ -95,6 +97,10 @@ def login(username: str, password: str) -> tuple[dict, str]:
         raise ServiceError(401, "http_401", "Unauthorized")
     security.clear_failures(username)
     with closing(db.connect()) as connection, connection:
+        connection.execute("BEGIN IMMEDIATE")
+        latest = connection.execute("SELECT password_hash FROM users WHERE id=?", (credentials["id"],)).fetchone()
+        if latest is None or latest["password_hash"] != credentials["password_hash"]:
+            raise ServiceError(401, "http_401", "Unauthorized")
         user = _user(connection, credentials["id"])
         if user is None:
             raise ServiceError(401, "http_401", "Unauthorized")
@@ -122,3 +128,50 @@ def logout(token: str | None) -> None:
     if token:
         with closing(db.connect()) as connection, connection:
             connection.execute("DELETE FROM auth_sessions WHERE token_hash=?", (security.token_hash(token),))
+
+
+def _patient_profile(row) -> dict:
+    profile = {name: row[name] if row else None for name in PROFILE_FIELDS}
+    return {"profile": profile, "updated_at": row["updated_at"] if row else None,
+            "complete": all(value is not None for value in profile.values())}
+
+
+def patient_profile(patient_id: str) -> dict:
+    with closing(db.connect()) as connection:
+        return _patient_profile(connection.execute("SELECT * FROM patient_profiles WHERE patient_id=?", (patient_id,)).fetchone())
+
+
+def update_patient_profile(patient_id: str, changes: dict) -> dict:
+    with closing(db.connect()) as connection, connection:
+        connection.execute("BEGIN IMMEDIATE")
+        row = connection.execute("SELECT * FROM patient_profiles WHERE patient_id=?", (patient_id,)).fetchone()
+        values = {**_patient_profile(row)["profile"], **changes}
+        codes = json.dumps([entry["code"] for entry in match("medicines", values["medications"])]) if "medications" in changes else row["medication_codes"] if row else "[]"
+        connection.execute(f"""INSERT INTO patient_profiles(patient_id,{','.join(PROFILE_FIELDS)},medication_codes,updated_at)
+            VALUES (?,{','.join('?' for _ in PROFILE_FIELDS)},?,?) ON CONFLICT(patient_id) DO UPDATE SET
+            {','.join(name+'=excluded.'+name for name in PROFILE_FIELDS)},
+            medication_codes=excluded.medication_codes,updated_at=excluded.updated_at""",
+            (patient_id, *(values[name] for name in PROFILE_FIELDS), codes, db.utc_now()))
+        return _patient_profile(connection.execute("SELECT * FROM patient_profiles WHERE patient_id=?", (patient_id,)).fetchone())
+
+
+def change_password(user: dict, token: str, current_password: str, new_password: str) -> None:
+    if user["role"] == "admin" or user["username"] in {doctor["id"] for doctor in load_doctors()["doctors"]}:
+        raise ServiceError(409, "password_managed", "Password is managed by server configuration")
+    key = "pw:" + user["username"]
+    retry = security.login_retry_after(key)
+    if retry:
+        raise ServiceError(429, "http_429", "Too Many Requests", {"Retry-After": str(retry)})
+    with closing(db.connect()) as connection, connection:
+        connection.execute("BEGIN IMMEDIATE")
+        cookie_hash = security.token_hash(token)
+        if connection.execute("SELECT 1 FROM auth_sessions WHERE token_hash=? AND user_id=? AND expires_at>?",
+                              (cookie_hash, user["id"], db.utc_now())).fetchone() is None:
+            raise ServiceError(401, "http_401", "Unauthorized")
+        row = connection.execute("SELECT password_hash FROM users WHERE id=?", (user["id"],)).fetchone()
+        if not security.verify_password(current_password, row["password_hash"]):
+            security.record_failure(key)
+            raise ServiceError(401, "invalid_current_password", "Current password is incorrect")
+        connection.execute("UPDATE users SET password_hash=? WHERE id=?", (security.hash_password(new_password), user["id"]))
+        connection.execute("DELETE FROM auth_sessions WHERE user_id=? AND token_hash<>?", (user["id"], cookie_hash))
+    security.clear_failures(key)

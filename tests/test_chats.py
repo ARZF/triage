@@ -35,7 +35,7 @@ class ChatTests(unittest.TestCase):
         self.doctor = TestClient(app)
         self.addCleanup(self.doctor.close)
         self.doctor_row = register_doctor(self.doctor)
-        self.doctor.get("/v1/doctor/requests")
+        self.doctor.post("/v1/doctor/heartbeat")
         state = self.patient.post("/v1/chat/sessions").json()
         self.session_id = state["session_id"]
         for answer in intake_answers():
@@ -236,7 +236,7 @@ class ChatTests(unittest.TestCase):
             def connect(_):
                 with closing(db.connect()) as connection:
                     return connection.execute("PRAGMA user_version").fetchone()[0]
-            self.assertEqual(list(pool.map(connect, range(3))), [7, 7, 7])
+            self.assertEqual(list(pool.map(connect, range(3))), [8, 8, 8])
         with closing(db.connect()) as connection:
             self.assertEqual(connection.execute("SELECT status FROM visit_requests WHERE id=?", (self.visit_id,)).fetchone()[0], "accepted")
             def structure(connection):
@@ -246,7 +246,7 @@ class ChatTests(unittest.TestCase):
             upgraded = structure(connection)
         fresh = self.path.with_name("fresh.db")
         with patch.dict(os.environ, {"APP_DB_PATH": str(fresh)}), ThreadPoolExecutor(max_workers=3) as pool:
-            self.assertEqual(list(pool.map(connect, range(3))), [7, 7, 7])
+            self.assertEqual(list(pool.map(connect, range(3))), [8, 8, 8])
             with closing(db.connect()) as connection:
                 self.assertEqual(structure(connection), upgraded)
                 self.assertEqual([row[2] for row in connection.execute("PRAGMA index_info(visit_messages_request_id)")], ["request_id", "id"])

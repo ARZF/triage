@@ -76,7 +76,7 @@ class PersistenceTests(unittest.TestCase):
             for value in (row["created_at"], row["updated_at"], messages[0]["created_at"]):
                 self.assertEqual(datetime.fromisoformat(value).utcoffset(), timedelta(0))
             self.assertEqual(connection.execute("PRAGMA foreign_keys").fetchone()[0], 1)
-            self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 7)
+            self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 8)
 
     def test_returning_profile_yes_prefills_and_skips_questions(self):
         first = self.complete(allergies="synthetic allergy")
@@ -323,6 +323,7 @@ class PersistenceTests(unittest.TestCase):
         with closing(sqlite3.connect(self.db_path)) as connection, connection:
             counts = {table: connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
                       for table in ("users", "patients", "sessions", "auth_sessions", "messages", "doctors")}
+            connection.execute("DROP TABLE patient_profiles")
             for name in added:
                 connection.execute(f"ALTER TABLE sessions DROP COLUMN {name}")
             connection.execute("PRAGMA user_version=3")
@@ -330,7 +331,7 @@ class PersistenceTests(unittest.TestCase):
             def migrate(_):
                 with closing(db.connect()) as connection:
                     return connection.execute("PRAGMA user_version").fetchone()[0]
-            self.assertEqual(list(pool.map(migrate, range(2))), [7, 7])
+            self.assertEqual(list(pool.map(migrate, range(2))), [8, 8])
         with closing(db.connect()) as connection:
             for table, count in counts.items():
                 self.assertEqual(connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0], count)
@@ -341,7 +342,7 @@ class PersistenceTests(unittest.TestCase):
         history = self.client.get("/v1/me/history").json()[0]
         self.assertIsNone(history["collected"]["height_cm"])
         new = self.create()
-        self.assertTrue(new["returning"])
+        self.assertFalse(new["returning"])
         self.assertEqual(new["step"], "age")
         self.assertTrue(all(value is None for value in new["collected"].values()))
         self.assertEqual(new["matched"]["medicines"], [])
@@ -366,7 +367,7 @@ class PersistenceTests(unittest.TestCase):
                 self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 3)
                 self.assertNotIn("height_cm", {row[1] for row in connection.execute("PRAGMA table_info(sessions)")})
             with closing(db.connect()) as connection:
-                self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 7)
+                self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 8)
 
     def test_new_intake_fields_round_trip_in_history_and_complaint_is_redacted(self):
         state = self.create()
@@ -409,7 +410,7 @@ class PersistenceTests(unittest.TestCase):
             self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 4)
             self.assertNotIn("additional_context", {row[1] for row in connection.execute("PRAGMA table_info(sessions)")})
         with closing(db.connect()) as connection:
-            self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 7)
+            self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 8)
             row = connection.execute("SELECT * FROM sessions WHERE id=?", (state["session_id"],)).fetchone()
             self.assertEqual(row["medications"], "paracetamol")
             self.assertIsNone(row["additional_context"])

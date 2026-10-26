@@ -11,8 +11,8 @@ from app.core.errors import ServiceError
 
 logger = logging.getLogger(__name__)
 # ponytail: single process and SQLite, polling-based presence; use shared presence tracking when scaling.
-# ponytail: a fixed 45-second heartbeat window suits 10-second polling; make presence configurable or push-based when needed.
-ONLINE_SECONDS = 45
+# ponytail: a fixed 90-second window tolerates throttled hidden-tab heartbeats every 20 seconds; use shared/push presence when scaling.
+ONLINE_SECONDS = 90
 ONLINE_SQL = "CASE WHEN verified=1 AND available=1 AND last_seen_at>=:cutoff AND last_seen_at<=:now THEN 1 ELSE 0 END"
 
 
@@ -28,8 +28,10 @@ def seed_doctors() -> None:
             connection.execute(
                 """INSERT INTO doctors(id, name_fa, specialty_code, expertise, score, verified, created_at, review_status)
                    VALUES (:id, :name_fa, :specialty_code, :expertise, :score, 1, :created_at, 'approved')
-                   ON CONFLICT(id) DO UPDATE SET name_fa=excluded.name_fa,
-                     specialty_code=excluded.specialty_code, expertise=excluded.expertise,
+                   ON CONFLICT(id) DO UPDATE SET
+                     name_fa=CASE WHEN doctors.user_id IS NULL THEN excluded.name_fa ELSE doctors.name_fa END,
+                     specialty_code=CASE WHEN doctors.user_id IS NULL THEN excluded.specialty_code ELSE doctors.specialty_code END,
+                     expertise=CASE WHEN doctors.user_id IS NULL THEN excluded.expertise ELSE doctors.expertise END,
                      score=excluded.score, last_seen_at=NULL""",
                 {**doctor, "expertise": json.dumps(doctor["expertise"], ensure_ascii=False), "created_at": db.utc_now()},
             )
@@ -83,3 +85,45 @@ def set_available(doctor_id: str, available: bool) -> dict:
         require_doctor(connection, doctor_id)
         connection.execute("UPDATE doctors SET available=? WHERE id=?", (available, doctor_id))
     return {"available": available}
+
+
+def _profile(row) -> dict:
+    return {"name_fa": row["name_fa"], "specialty": specialty(row["specialty_code"]),
+            "expertise": json.loads(row["expertise"]), "license_number": row["license_number"],
+            "score": row["score"], "status": row["review_status"], "review_note": row["review_note"],
+            "resubmitted_at": row["resubmitted_at"]}
+
+
+def profile(doctor_id: str) -> dict:
+    with closing(db.connect()) as connection:
+        return _profile(connection.execute("SELECT * FROM doctors WHERE id=?", (doctor_id,)).fetchone())
+
+
+def update_profile(doctor_id: str, changes: dict) -> dict:
+    with closing(db.connect()) as connection, connection:
+        connection.execute("BEGIN IMMEDIATE")
+        row = connection.execute("SELECT * FROM doctors WHERE id=?", (doctor_id,)).fetchone()
+        if row["review_status"] == "suspended":
+            raise ServiceError(403, "profile_locked", "Profile is locked while the doctor is suspended")
+        values = {name: row[name] for name in ("name_fa", "specialty_code", "expertise", "license_number")}
+        values.update({**changes, **({"expertise": json.dumps(changes["expertise"], ensure_ascii=False)} if "expertise" in changes else {})})
+        if connection.execute("SELECT 1 FROM doctors WHERE license_number=? AND id<>?", (values["license_number"], doctor_id)).fetchone():
+            raise ServiceError(409, "license_unavailable", "License number unavailable")
+        changed = any(values[name] != row[name] for name in values)
+        identity_changed = any(values[name] != row[name] for name in ("specialty_code", "license_number"))
+        target = row["review_status"]
+        resubmit = changed and target == "rejected" or target == "approved" and identity_changed and not Settings().doctor_auto_verify
+        if resubmit:
+            if target == "approved" and connection.execute("SELECT 1 FROM visit_requests WHERE doctor_id=? AND status='accepted' AND ended_at IS NULL", (doctor_id,)).fetchone():
+                raise ServiceError(409, "active_visits", "Doctor has active visits")
+            target = "approved" if Settings().doctor_auto_verify else "pending"
+        # Keep the redundant verification column in sync with the review state, as in admin.review.
+        connection.execute("""UPDATE doctors SET name_fa=:name_fa,specialty_code=:specialty_code,
+            expertise=:expertise,license_number=:license_number,review_status=:status,verified=:verified,
+            available=CASE WHEN :offline THEN 0 ELSE available END,
+            last_seen_at=CASE WHEN :offline THEN NULL ELSE last_seen_at END,
+            review_note=CASE WHEN :resubmit THEN NULL ELSE review_note END,
+            resubmitted_at=CASE WHEN :resubmit THEN :now ELSE resubmitted_at END WHERE id=:id""",
+            {**values, "status": target, "verified": target == "approved", "offline": resubmit and target == "pending",
+             "resubmit": resubmit, "now": db.utc_now(), "id": doctor_id})
+        return _profile(connection.execute("SELECT * FROM doctors WHERE id=?", (doctor_id,)).fetchone())

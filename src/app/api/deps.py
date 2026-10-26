@@ -32,6 +32,12 @@ def verified_doctor(user: dict = Depends(current_user)) -> dict:
     return user
 
 
+def doctor_user(user: dict = Depends(current_user)) -> dict:
+    if user["role"] != "doctor":
+        raise HTTPException(status_code=403)
+    return user
+
+
 def chat_user(user: dict = Depends(current_user)) -> dict:
     if user["role"] not in ("patient", "doctor"):
         raise HTTPException(status_code=403)

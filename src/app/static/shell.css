@@ -75,6 +75,21 @@ button:disabled { opacity:.5; cursor:default; }
 .urgency[data-level="urgent"],.urgency[data-level="emergency"] { background:#f8e8e6; color:var(--danger); }
 .ended-item { background:var(--tint); border:1px solid var(--line); padding:16px; border-radius:8px; }
 .card,.panel { border:1px solid var(--line); border-radius:8px; background:var(--surface); padding:20px; margin-block:16px; min-width:0; }
+.profile-view { width:100%; max-width:860px; margin-inline:auto; padding:24px; }
+.profile-view h2 { font-size:21px; font-weight:500; margin:0 0 12px; }
+.profile-view form { padding:0; margin:0; border:0; background:var(--surface); }
+.profile-view .profile-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px 20px; }
+.profile-field { min-width:0; margin-block-end:12px; }
+.profile-field label { display:block; font-size:14px; margin-block-end:6px; }
+.profile-field input,.profile-field select,.profile-field textarea { width:100%; min-width:0; min-height:44px; border:1px solid var(--line); border-radius:6px; padding:10px 12px; background:var(--surface); color:var(--ink); }
+.profile-field textarea { min-height:88px; resize:vertical; }
+.field-error { margin:4px 0 0; font-size:13px; color:var(--danger); }
+.field-error:empty { display:none; }
+.profile-field [aria-invalid="true"] { border-color:var(--danger); }
+.profile-view .success { color:var(--accent); padding-block:8px; }
+.profile-view .danger-section { border-color:var(--danger); }
+.profile-view .danger-section button { background:var(--surface); color:var(--danger); border-color:var(--danger); }
+@media(max-width:600px) { .profile-view { padding:16px; } .profile-view .profile-grid { grid-template-columns:minmax(0,1fr); } }
 @media(max-width:899px) {
   .app-layout,.app-layout.sidebar-closed { grid-template-columns:minmax(0,1fr); }
   #shell-main { grid-column:1; padding:16px; }

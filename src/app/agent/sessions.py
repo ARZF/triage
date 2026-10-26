@@ -7,7 +7,7 @@ from uuid import uuid4
 from app.core import db
 from app.core.errors import ServiceError
 from app.agent import dictionaries
-from app.agent.intake import PROFILE_FIELDS, QUESTIONS, Collected, IntakeState, advance, profile_state
+from app.agent.intake import PROFILE_FIELDS, PROFILE_WELCOME, QUESTIONS, Collected, IntakeState, advance, profile_state
 from app.services import doctors, visits
 
 REDACTED_MESSAGE = "متن این پیام به‌دلیل توقف اضطراری ذخیره نشده است."
@@ -53,15 +53,11 @@ def _values(state: IntakeState) -> dict:
 
 
 def _read(connection: sqlite3.Connection, session_id: str) -> sqlite3.Row:
-    # Qualifying completions at creation time keep returning stable for this session.
+    # ponytail: the initial welcome prefix records prefill without another schema column; migrate to an explicit creation flag before changing that prefix.
     row = connection.execute(
-        """SELECT s.*, EXISTS(
-            SELECT 1 FROM sessions previous
-            WHERE previous.patient_id=s.patient_id AND previous.id<>s.id
-              AND previous.done=1 AND previous.emergency=0
-              AND previous.updated_at<=s.created_at
-        ) AS "returning" FROM sessions s WHERE s.id=?""",
-        (session_id,),
+        """SELECT s.*, ((SELECT content FROM messages WHERE session_id=s.id ORDER BY id LIMIT 1) LIKE ?)
+            AS "returning" FROM sessions s WHERE s.id=?""",
+        (PROFILE_WELCOME + "%", session_id),
     ).fetchone()
     if row is None:
         raise KeyError(session_id)
@@ -78,8 +74,7 @@ def create_session(patient_id: str | None = None) -> sqlite3.Row:
         elif connection.execute("SELECT 1 FROM patients WHERE id=?", (patient_id,)).fetchone() is None:
             raise KeyError(patient_id)
         previous = connection.execute(
-            """SELECT * FROM sessions WHERE patient_id=? AND done=1 AND emergency=0
-               ORDER BY updated_at DESC, created_at DESC, rowid DESC LIMIT 1""",
+            "SELECT * FROM patient_profiles WHERE patient_id=?",
             (patient_id,),
         ).fetchone()
         has_profile = previous is not None and all(previous[name] is not None for name in PROFILE_FIELDS)
@@ -153,6 +148,16 @@ def send_message(session_id: str, message: str, edit_field: str | None = None) -
         content = REDACTED_MESSAGE if state.emergency and not previous.emergency else message
         db.add_message(connection, session_id, "user", content, now)
         db.add_message(connection, session_id, "bot", reply, now)
+        if state.done and not state.emergency:
+            fields = ','.join(PROFILE_FIELDS)
+            connection.execute(f"""INSERT INTO patient_profiles(patient_id,{fields},medication_codes,updated_at)
+                VALUES (?,{','.join('?' for _ in PROFILE_FIELDS)},?,?)
+                ON CONFLICT(patient_id) DO UPDATE SET
+                    {','.join(name+'=excluded.'+name for name in PROFILE_FIELDS)},
+                    medication_codes=excluded.medication_codes,updated_at=excluded.updated_at
+                WHERE patient_profiles.updated_at<=?""",
+                (row["patient_id"], *(getattr(state.collected, name) for name in PROFILE_FIELDS),
+                 codes["medication_codes"], now, row["created_at"]))
         return _read(connection, session_id)
 
 

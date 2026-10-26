@@ -122,7 +122,7 @@ class AdminTests(unittest.TestCase):
         page = response.json(); self.assertEqual(page["total"], 2)
         self.assertEqual(page["items"][0]["id"], self.doctor_row["id"])
         self.assertEqual(self.client.get("/v1/admin/doctors?limit=1&offset=1").json()["items"][0]["id"], second["id"])
-        self.assertEqual(set(page["items"][0]), {"id", "name_fa", "specialty", "expertise", "license_number", "registered_at", "status", "reviewed_at", "review_note"})
+        self.assertEqual(set(page["items"][0]), {"id", "name_fa", "specialty", "expertise", "license_number", "registered_at", "status", "reviewed_at", "review_note", "resubmitted_at"})
         for forbidden in (self.patient_user["id"], self.patient_user["patient_id"], self.patient_user["username"], self.doctor_row["user_id"], "username", "password"):
             self.assertNotIn(forbidden, response.text)
         for query in ("status=bad", "limit=0", "limit=101", "limit=bad", "offset=-1", "offset=9223372036854775808"):
@@ -182,7 +182,7 @@ class AdminTests(unittest.TestCase):
         self.assertEqual(self.doctor.get("/v1/doctor/requests").status_code, 200)
 
     def visit(self, client):
-        client.get("/v1/doctor/requests")
+        client.post("/v1/doctor/heartbeat")
         state = self.patient.post("/v1/chat/sessions").json()
         path = f"/v1/chat/sessions/{state['session_id']}/messages"
         if state["step"] == "profile": self.patient.post(path, json={"message": "no"})
@@ -289,7 +289,7 @@ class AdminMigrationTests(unittest.TestCase):
         with patch.dict(os.environ, {"APP_DOCTOR_AUTO_VERIFY": "false"}):
             self.pending = register_doctor(self.doctor)
         self.doctor.post("/v1/auth/login", json={"username": self.username(self.approved["user_id"]), "password": PASSWORD})
-        self.doctor.get("/v1/doctor/requests")
+        self.doctor.post("/v1/doctor/heartbeat")
         state = self.patient.post("/v1/chat/sessions").json()
         for answer in intake_answers(): self.patient.post(f"/v1/chat/sessions/{state['session_id']}/messages", json={"message": answer})
         self.patient.post(f"/v1/chat/sessions/{state['session_id']}/triage")
@@ -300,8 +300,9 @@ class AdminMigrationTests(unittest.TestCase):
             connection.execute("PRAGMA foreign_keys=OFF")
             connection.execute("BEGIN IMMEDIATE")
             connection.execute("DROP TABLE admin_audit")
+            connection.execute("DROP TABLE patient_profiles")
             connection.execute("DROP INDEX doctors_license_number")
-            for name in ("review_status", "license_number", "reviewed_at", "review_note"):
+            for name in ("review_status", "license_number", "reviewed_at", "review_note", "resubmitted_at"):
                 connection.execute(f"ALTER TABLE doctors DROP COLUMN {name}")
             user_sql = "CREATE TABLE users_v6 (" + db.SCHEMA.split("CREATE TABLE IF NOT EXISTS users (", 1)[1].split(";", 1)[0]
             connection.execute(user_sql)
@@ -329,7 +330,7 @@ class AdminMigrationTests(unittest.TestCase):
             with closing(db.connect()) as connection:
                 return (connection.execute("PRAGMA user_version").fetchone()[0], connection.execute("PRAGMA foreign_keys").fetchone()[0])
         with ThreadPoolExecutor(max_workers=3) as pool:
-            self.assertEqual(list(pool.map(migrate, range(3))), [(7, 1)] * 3)
+            self.assertEqual(list(pool.map(migrate, range(3))), [(8, 1)] * 3)
         after = self.rows()
         for name, rows in self.before.items():
             self.assertEqual([row[:len(rows[0])] for row in after[name]] if rows else after[name], rows, name)
@@ -358,7 +359,7 @@ class AdminMigrationTests(unittest.TestCase):
             self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 6)
             self.assertIsNone(connection.execute("SELECT 1 FROM sqlite_master WHERE name='admin_audit'").fetchone())
         with closing(db.connect()) as connection:
-            self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 7)
+            self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 8)
 
     def test_foreign_key_check_aborts_rebuild_without_changing_old_schema(self):
         with closing(sqlite3.connect(self.path)) as connection, connection:
@@ -381,7 +382,7 @@ class AdminMigrationTests(unittest.TestCase):
             def connect(_):
                 barrier.wait(timeout=10)
                 with closing(db.connect()) as connection: return connection.execute("PRAGMA user_version").fetchone()[0]
-            with ThreadPoolExecutor(max_workers=3) as pool: self.assertEqual(list(pool.map(connect, range(3))), [7, 7, 7])
+            with ThreadPoolExecutor(max_workers=3) as pool: self.assertEqual(list(pool.map(connect, range(3))), [8, 8, 8])
             with closing(db.connect()) as connection:
                 self.assertEqual(structure(connection), upgraded)
                 self.assertEqual(connection.execute("PRAGMA foreign_key_check").fetchall(), [])

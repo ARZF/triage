@@ -422,7 +422,7 @@ class TriageTests(unittest.TestCase):
             connection.execute("DROP TABLE triage_results")
             connection.execute("PRAGMA user_version=1")
         with closing(db.connect()) as connection:
-            self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 7)
+            self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 8)
             self.assertEqual(connection.execute("SELECT age FROM sessions WHERE id=?", (state["session_id"],)).fetchone()[0], 30)
             self.assertEqual(connection.execute("SELECT COUNT(*) FROM triage_results").fetchone()[0], 0)
 

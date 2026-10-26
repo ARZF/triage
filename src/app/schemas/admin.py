@@ -22,6 +22,7 @@ class DoctorReview(BaseModel):
     status: ReviewStatus
     reviewed_at: str | None
     review_note: str | None
+    resubmitted_at: str | None
 
 
 class DoctorPage(BaseModel):

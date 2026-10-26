@@ -1,6 +1,6 @@
 # Healthcare Agent: Implementation Plan and Specification
 
-Status: Slices 1a, 2a, 2b, 3, 4, 5, 6 and 7a approved. Intake, vocabulary, memory, specialty triage, accounts, visits, direct text chat, admin doctor review and shared conversation dashboards are in scope; future workflow decisions remain proposals.
+Status: Slices 1a, 2a, 2b, 3, 4, 5, 6, 7a and 7b approved. Intake, vocabulary, memory, specialty triage, accounts, visits, direct text chat, admin doctor review, shared dashboards and editable profiles/passwords are in scope; future workflow decisions remain proposals.
 
 ## 1. Purpose
 
@@ -20,6 +20,7 @@ at a time, with an explicit API contract and a runnable check for its behavior.
 - Schema v6 adds visit end timestamps and indexed direct messages. Patient request/message polling is read-only; the doctor alone ends an accepted visit without removing its history.
 - Schema v7 adds the configured admin role, synthetic license numbers, doctor review states and a review-only audit. Suspension also ends the doctor's open visits. Admins cannot access patient data.
 - Slice 7a adds read-only conversation list/detail routes, shared CSS/JS dashboard assets and one continuous patient/doctor thread. Page loads resume existing conversations. Schema remains v7.
+- Slice 7b adds editable profiles and password changes, a dedicated heartbeat, read-only doctor polling and schema v8. Profile edits preserve historical intakes and cannot overwrite a newer profile through stale intake completion. The online window is 90 seconds.
 - `src/app/core/config.py` defines frozen settings read from `os.environ`. `APP_LOG_LEVEL` defaults to `INFO`; INFO, WARNING, ERROR, and CRITICAL are accepted (case insensitive). Invalid values fail startup. The application does not load `.env` files.
 
 ## 3. Project boundaries
@@ -39,6 +40,7 @@ at a time, with an explicit API contract and a runnable check for its behavior.
 - Slice 5 supersedes earlier direct-chat exclusions, schema version and patient-list expiry writes. It uses only existing approved folders; no folders or dependencies are added.
 - Slice 6 supersedes earlier admin exclusions, doctor registration requirements and schema version. Review audit is implemented; patient/chat audit remains excluded. It reuses existing folders and dependencies.
 - Slice 7a supersedes earlier self-contained dashboard, history-aside and visit-chat-panel descriptions. Only shell.css and shell.js are new files; no folders, dependencies or schema changes. Login remains unchanged.
+- Slice 7b supersedes earlier profile/password exclusions, completed-session prefill source, GET presence side effect, 45-second online window and five-second identity refresh. Existing folders/dependencies are reused.
 
 ## 4. Decisions for persistence and future slices
 
@@ -342,6 +344,30 @@ Complete this section for each agreed feature before writing its code:
 - **Acceptance examples:** reload mid-intake resumes without another session; sidebar switches thread and pauses old chat polling; full patient/doctor flow stays in one thread; ended history is readable; keyboard/mobile drawer and admin routes work.
 - **Runnable check:** baseline/final unittest discovery with temporary databases/no network; add list/detail/status/ownership/stored-triage/redaction/read-only/visit-field/asset/static checks to existing test files. Reinstall and test real browser at 1280/390px plus smaller responsive widths; report unverified cases.
 - **NOT implemented:** unread counts, push, per-conversation deletion, conversation search, unfinished-session cleanup/caps, profile or password features (Slice 7b).
+
+### Feature: Slice 7b — profiles, password change and dedicated heartbeat
+
+- **Status:** approved.
+- **User outcome:** patients edit a reusable health profile without changing past assessments; doctors edit their professional profile with review safeguards; patient/doctor accounts change passwords and sign out other sessions; verified doctors remain present while working in another tab.
+- **Scope:** existing folders/dependencies, synthetic data only. Reuse existing shell, validators, password hashing/throttle helpers, profile fields, dictionary matching and transactional SQLite patterns. Do not commit or push.
+- **Heartbeat contract:** POST /v1/doctor/heartbeat, verified doctor only (403 otherwise), no body, 204. One BEGIN IMMEDIATE updates that doctor's last_seen_at and sweeps expired pending requests. This POST is the only presence refresh; existing offline-clearing operations remain. GET /v1/doctor/requests is read-only, excludes overdue pending rows using the existing TTL cutoff, and performs no sweep. ONLINE_SECONDS=90; browser heartbeat every 20 seconds regardless of visibility, immediately after identity load and availability-on; 403 refreshes identity and transient failures are ignored. Request refresh remains 10 seconds/visible-only; identity refresh becomes 15 seconds/visible-only.
+- **Database:** additive schema-v8 migration creates patient_profiles with patient_id PK/cascading patient FK; nullable age INTEGER, height_cm/weight_kg REAL and five profile text fields; medication_codes TEXT NOT NULL DEFAULT '[]', updated_at TEXT NOT NULL. Add nullable doctors.resubmitted_at after checking table_info. Backfill once from each patient's latest completed, non-emergency session having all PROFILE_FIELDS non-null, ordered updated_at/created_at/rowid descending; copy stored medication_codes. Fresh/upgraded schemas match, concurrent first connections are safe, failed migration rolls back and can retry. Deletion cascades with secure_delete enabled.
+- **Patient API:** GET/PATCH /v1/patient/profile, patient only, returns {profile:{age,height_cm,weight_kg,medical_history,medications,medication_history,food_allergies,allergies},updated_at:str|null,complete:bool}; unset values are null. PATCH forbids extras/nulls, requires at least one field, age integer 0–120, positive finite height/weight through a shared pure intake parser (Persian decimal accepted), stripped text 1–2000. Recompute medication_codes when medications changes; set updated_at. No red-flag screening on profile fields.
+- **Prefill and completion:** new sessions use patient_profiles only; complete profiles get the current welcome-back/profile-confirmation flow. Completion of a non-emergency intake upserts profile fields/codes in the same transaction only if the existing profile updated_at is not newer than the session created_at. Emergency stops never update profiles. Profile edits never modify old sessions, transcript/history, doctor context or stored triage; only new assessments use edits.
+- **Doctor API:** GET/PATCH /v1/doctor/profile, any doctor account. GET returns exactly {name_fa,specialty:{code,name_fa},expertise,license_number,score,status,review_note,resubmitted_at}. PATCH forbids extras/protected fields/nulls and requires at least one field: name_fa stripped 2–60, expertise 2–3 stripped strings of 2–40, SpecialtyCode specialty_code, stripped ASCII license ^[A-Za-z0-9-]{4,20}$. Check duplicate license and update within BEGIN IMMEDIATE; duplicate -> 409 license_unavailable. Keep verified=(review_status='approved') in the same UPDATE. Admin review projections gain resubmitted_at; pending cards show «ارسال مجدد پس از تغییر مشخصات» plus date.
+
+| Doctor status | Profile edit rule |
+| --- | --- |
+| approved | Name/expertise edits remain approved. Actual specialty/license changes require no accepted unended visits (409 active_visits, atomic no-op otherwise); move to pending, verified/available=0, presence/note cleared, resubmitted_at=now. Auto-verify keeps approval and bypasses the active-visit restriction. |
+| pending | Any editable field may change; status remains pending. |
+| rejected | Any actual change resubmits to pending (or approved with auto-verify), clears note, sets resubmitted_at, preserves reviewed_at. |
+| suspended | 403 profile_locked; password changes remain allowed. |
+
+- **Password API:** POST /v1/me/password {current_password,new_password}, extras forbidden; new 8–128 characters and different (422). Admin and doctors.json-id usernames -> 409 password_managed with server-configuration message. Verify current password using security.verify_password; wrong -> 401 invalid_current_password without login redirect. Reuse throttle under 'pw:'+username: five failures/15 minutes, 429 with Retry-After, success clears. Atomically update hash and delete other auth sessions while preserving current-cookie session and cookie; 204. Never log passwords.
+- **Pages:** patient #/profile is an explicit allowed route/sidebar item, increments routeVersion, disposes live chat and hides thread/composer; navigating back restores conversation. Editable health form has Persian labels, field/general errors, success/incomplete states and past-conversation disclaimer; account deletion with confirmation moves here. Doctor #/profile remains available while unverified/waiting; form has specialty catalog, name/expertise/license, read-only score/status/note and password form. Confirm specialty/license re-review, map active_visits/license_unavailable/profile_locked to clear Persian errors and refresh identity after save. Shared password form checks confirmation, uses correct autocomplete, handles 401/422/429 Retry-After and managed-password 409 without redirect; success says other devices signed out. Admin has no profile page. TextContent-only rendering, existing forest tokens, RTL and responsive/focus behavior remain.
+- **Acceptance examples:** edit patient profile then start new intake and see edited welcome-back; finish stale unfinished intake without overwriting a newer profile edit; change password while another browser session becomes unauthorized; freely edit approved doctor name/expertise, reject specialty change during active visits, then resubmit after ending and see admin marker; doctor stays online during two minutes in another tab.
+- **Runnable check:** baseline and final full unittest suites, temporary databases/no network. Cover migration/backfill/rollback/concurrency/equivalence, heartbeat-only presence/read-only GET/89–91-second bounds, patient validation/ownership/stale completion/history preservation/cascade, every doctor status/auto-verify/uniqueness/sync rule, password hash/throttle/session/log privacy, static route/sink checks. Editable install and real-browser walkthrough; report anything unverified.
+- **NOT implemented:** email/phone fields, password reset by email, MFA, account recovery, doctor account deletion, profile change history/audit, profile photos.
 
 ## 6. Coding and verification rules
 
@@ -970,3 +996,101 @@ agent/sessions.py, api/chat.py, api/demo.py, schemas/chat.py, schemas/visits.py,
 services/visits.py under src/app; static/index.html, doctor.html, admin.html,
 shell.css and shell.js; tests/test_chat_api.py, test_visits.py, test_auth.py and
 test_admin.py. Only shell.css and shell.js are new files.
+
+## 22. Slice 7b implementation and verification (2026-10-26)
+
+- [x] Specify Slice 7b as approved in section 5 before implementation.
+- [x] Add the transactional doctor heartbeat, 90-second presence window,
+  read-only request GET and separate 20/10/15-second browser timers.
+- [x] Add atomic schema-v8 migration/backfill, cascading patient profiles and
+  doctor resubmission timestamp, including concurrent bootstrap/rollback checks.
+- [x] Use saved complete profiles for new intakes, share measurement parsing,
+  preserve history/context and guard completion against newer profile edits.
+- [x] Add validated, role-limited patient/doctor profile APIs and every doctor
+  status, active-visit, duplicate-license and auto-verification rule.
+- [x] Add password verification/throttling and atomic other-session revocation;
+  preserve the current cookie and reject stale-password login races.
+- [x] Add Persian RTL patient/doctor profile forms, password controls, moved
+  patient deletion section and the admin resubmission marker.
+- [x] Preserve linked seed doctors' edited metadata through startup seeding.
+- [x] Update README/changelog and leave 23 added unittest checks. No new folders
+  or dependencies; no commit or push.
+
+PowerShell verification from the repository root:
+
+```text
+.\.venv\Scripts\python.exe -m unittest discover tests
+Before editing: Ran 162 tests in 91.327s
+OK
+After implementation: Ran 185 tests in 109.439s
+OK
+
+.\.venv\Scripts\python.exe -m pip install -e .
+Successfully built healthcare-agent
+Successfully installed healthcare-agent-0.1.0
+```
+
+The suite covers profile validation/ownership, immutable prior sessions/context,
+stale completion/emergency protection, cascade deletion, migration backfill and
+rollback/retry/equivalent structures/concurrency, read-only polling, heartbeat
+atomicity and presence boundaries, doctor status/active-visit rules, managed
+passwords, separate throttles, session revocation/rollback, password-log privacy,
+login races, seed-edit persistence and static route/rendering constraints.
+All 162 existing tests remain and pass with updated schema/presence/prefill
+expectations. The installed Starlette/httpx deprecation warning remains.
+Node syntax checks pass for shell.js and all three dashboard inline scripts;
+git diff --check passes. The authorized process-only proxy bypass was restored
+after installation. Project Python and loopback checks needed sandbox escalation.
+
+Started with the README's uv --env-file command, --port 8002, a unique temporary
+APP_DB_PATH, synthetic admin/seed credentials, auto-verification off and provider
+configuration disabled. Existing databases/listeners and the ignored .env were
+left untouched. /health, /docs, /demo, /doctor, /admin and both shared assets
+returned HTTP 200. The temporary verification server was stopped afterwards.
+
+Real-browser automation used isolated localhost cookie origins for a patient,
+doctor, administrator and second patient login. Patient profile edits accepted
+Persian/Arabic-Indic measurements and appeared in a new welcome-back before any
+previous intake had completed. New intake, fallback triage, request acceptance
+and ending still worked. Returning from profile restored the conversation.
+Approved doctor name/expertise edits retained approval; a specialty change during
+an active visit displayed the Persian conflict, while the same change after
+ending produced the review banner and admin resubmission marker/date. Admin
+approval returned the doctor to service. After more than four minutes working
+in other tabs, the patient still saw the doctor online.
+
+A live local-API password change returned 204, retained that client's cookie,
+rejected the old password and accepted the new one. Reloading an independently
+logged-in browser session displayed login after revocation. At 390px the patient
+profile rejected age 121 with a Persian field hint, saved a correction and
+reloaded it. Desktop 1280px/mobile 390px profiles had no horizontal overflow;
+screenshots were inspected and saved outside the repository. No console errors
+were observed in the final patient mobile, doctor or admin tab checks.
+
+Unverified in the browser: actual hidden-tab timer throttling (the in-app browser
+reports all tabs visible), literal private windows, and password-form submission.
+The password change itself and browser-session revocation were checked through
+the live local API plus browser reload; credential entry in the change form
+requires user handoff under the computer-use policy. Managed-password/throttle
+form messages and transient heartbeat failure handling were not exercised in
+the browser; server contracts are covered by tests. No live provider or real
+patient data was used.
+
+Known shortcut: the immutable first welcome-message prefix records whether a
+session was created with profile prefill. It avoids an additional schema field;
+the ponytail comment requires an explicit creation flag before changing that
+prefix. Password throttling remains bounded and process-local; shared storage
+is the upgrade path when scaling.
+
+Files changed:
+- README.md, docs/plan.md and docs/changelog.md.
+- src/app/agent/intake.py and sessions.py.
+- src/app/api/auth.py, deps.py, patients.py and visits.py.
+- src/app/core/db.py and security.py.
+- src/app/schemas/admin.py, auth.py and patients.py.
+- src/app/services/accounts.py, admin.py, doctors.py and visits.py.
+- src/app/static/index.html, doctor.html, admin.html, shell.css and shell.js.
+- tests/test_profiles.py (new), test_admin.py, test_auth.py, test_chats.py,
+  test_persistence.py, test_triage.py and test_visits.py.
+
+Stop after Slice 7b. Do not commit or push.

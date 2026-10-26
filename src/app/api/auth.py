@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, Request, Response
 from app.agent.doctors import load_doctors
 from app.api.deps import current_user
 from app.core.config import Settings
-from app.schemas.auth import AuthResponse, LoginRequest, Registration
+from app.schemas.auth import AuthResponse, LoginRequest, PasswordChange, Registration
 from app.schemas.common import ErrorResponse
 from app.services import accounts
 
@@ -52,3 +52,9 @@ def me(user: dict = Depends(current_user)) -> dict:
 @router.get("/specialties")
 def specialties() -> list[dict]:
     return [{"code": entry["code"], "name_fa": entry["name_fa"]} for entry in load_doctors()["specialties"]]
+
+
+@router.post("/me/password", status_code=204, responses={status: {"model": ErrorResponse} for status in (401, 409, 422, 429)})
+def password(body: PasswordChange, request: Request, user: dict = Depends(current_user)) -> Response:
+    accounts.change_password(user, request.cookies["session"], body.current_password, body.new_password)
+    return Response(status_code=204)

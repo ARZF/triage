@@ -19,7 +19,7 @@ For databases from the old anonymous demo only, stop the server and delete the o
 synthetic database once, or select a fresh APP_DB_PATH. Old anonymous visits
 have no account ownership and are not migrated into accounts. Keep any data
 you need before resetting. The application never deletes the database for you.
-Existing schema-v3, v4, v5 and v6 databases upgrade automatically to schema v7;
+Existing schema-v3 through v7 databases upgrade automatically to schema v8;
 keep those databases when updating the intake or adding visit chat.
 
 ```powershell
@@ -55,8 +55,9 @@ Doctor accounts start unverified unless APP_DOCTOR_AUTO_VERIFY=true at
 registration. APP_DOCTOR_AUTO_VERIFY=true is a local-demo shortcut that skips
 admin review for new registrations; it does not approve existing doctors.
 Pending, rejected and suspended doctors may log in and see their own status
-and review note, but have no queue/patient UI, doctor data access or patient
-directory listing. Their page checks status every five seconds while visible.
+and review note, and edit their own profile/password, but have no queue/patient UI,
+doctor data access or patient directory listing. Their page checks status every
+15 seconds while visible. Suspended doctors can change passwords but cannot edit profiles.
 
 The configured admin username, literal admin and all seed-doctor ids are reserved
 and cannot self-register. Admin accounts cannot self-register or access any
@@ -107,9 +108,13 @@ The first doctor to accept wins; the other queue clears on its next poll,
 and the patient sees the accepting doctor's card in the same conversation.
 Acceptance opens the doctor's patient thread; exchange synthetic messages there.
 
-The doctor dashboard polls every ten seconds while visible. Polling updates
-its presence heartbeat. Online means verified, available, and seen in the
-last 45 seconds. Switching availability off hides pending requests and blocks
+The doctor dashboard reads requests every ten seconds while visible, without
+writing rows. A separate heartbeat POST runs every 20 seconds even in another
+tab, immediately after initial identity/verification load and when availability
+turns on. It refreshes presence and sweeps expired pending requests in one transaction.
+Online means verified, available, and seen in the last 90 seconds. The margin
+allows browser timer throttling; a fully suspended browser cannot promise presence.
+Switching availability off hides pending requests and blocks
 acceptance while leaving the doctor's already-accepted visits visible.
 Queue entries contain only age, symptoms, duration and severity previews.
 The accepting doctor alone gets full structured intake, prior visits and the
@@ -129,7 +134,7 @@ change validation bounds.
 These checks validate input format; no clinical plausibility or BMI calculation
 is performed. Age is 0-120; severity 1-10. New text questions require non-empty
 answers; histories/allergies accept «هیچ»/«ندارد». Invalid answers re-ask the step.
-Returning patients can confirm their last complete non-emergency profile,
+Returning patients can confirm their saved complete health profile,
 including height, weight, histories and allergies, then answer a new complaint
 and symptoms. Profiles missing new fields start a full intake instead.
 Negative final confirmation clears the intake; completed states do not change.
@@ -190,14 +195,14 @@ online. Use the existing triage refresh/retry control to refresh doctor presence
 
 Request statuses are pending, accepted, cancelled and expired. Patients may
 cancel pending requests only. Pending requests expire after the configured TTL.
-Create, cancel, accept and doctor-list operations sweep expired pending rows.
+Create, cancel, accept and heartbeat operations sweep expired pending rows.
 The patient list projects expired status without changing stored rows. Cancelled or
 expired requests allow another request for the same intake, including after reload.
 The patient conversation list polls every ten seconds while anything is pending
 and the tab is visible. Accepted requests show the accepting doctor's card.
 
-GET /v1/doctor/requests intentionally updates last_seen_at and sweeps expiry.
-Patient request lists and visit-message reads are read-only.
+GET /v1/doctor/requests excludes overdue pending rows without updating them.
+Doctor/patient request lists, conversation details and visit-message reads are read-only.
 No GET accepts/cancels a request, changes availability, logs in or logs out.
 
 ## Accepted-visit text chat
@@ -236,22 +241,60 @@ closed on each load, uses a backdrop, traps keyboard focus, closes with Escape
 or a link, returns focus to the toggle and locks background scrolling. Motion
 respects the reduced-motion preference. Hash routes support browser back/forward.
 
-Patient routes are #/new and #/c/<session_id>. The sidebar lists up to 50 recent
-conversations with date, short complaint and status, plus confirmed account
-deletion. The thread order is collected-data disclosure, intake/review, one
+Patient routes are #/new, #/c/<session_id> and #/profile. The sidebar lists up to 50 recent
+conversations with date, short complaint and status, plus «پروفایل من».
+Confirmed account deletion is in the profile's danger section. The thread order is collected-data disclosure, intake/review, one
 triage card, request status, accepting doctor, direct messages, then ended notice.
 One bottom composer follows the current stage; pending/triage and ended/full
 states prevent sending. Opening a saved conversation displays stored triage,
 including fallback, without a provider call; «تلاش دوباره» explicitly refreshes it.
 
-Doctor routes are #/queue and #/patient/<request_id>. The queue badge and accepted
+Doctor routes are #/queue, #/patient/<request_id> and #/profile. The queue badge and accepted
 visits (active first, ended last) live in the sidebar with availability. The
 patient thread starts with «گزارش سامانهٔ پذیرش», structured intake, previous
 visits and the doctor-only AI warning. Admin routes are #/pending, #/approved,
 #/rejected, #/suspended and #/audit, retaining review notes and paging.
 
 Unread counts, push, per-conversation deletion/search, unfinished-session cleanup
-or caps, profile editing and password features are not implemented.
+or caps are not implemented.
+
+## Profiles and password change
+
+Open «پروفایل من» as a patient to edit age, height, weight, histories, current
+medicines and food/drug allergies. Fields can be saved gradually; complete
+profiles prefill only new assessments. Height/weight reuse the intake's positive
+finite decimal parser, including Persian digits/٫. Profile text is vocabulary/data
+only: no red-flag screening is added here. Existing conversations, history,
+doctor reports and triage inputs remain unchanged after an edit.
+
+Schema v8 backfills each profile once from the latest completed, non-emergency
+session with every profile field present. A completed non-emergency intake
+updates the profile atomically only if the profile was not edited after that
+intake started. Emergency stops leave profiles untouched. Account deletion also
+cascades to the profile; incomplete profiles start the normal full intake.
+
+Every doctor can open «پروفایل», including while waiting for review. Approved
+doctors can freely edit their name and expertise. Changing specialty or license
+actually moves them to pending review, clears presence/availability and requires
+no active accepted visits; otherwise 409 active_visits leaves everything unchanged.
+Pending doctors can edit without changing status. A rejected doctor's actual edit
+resubmits for review; suspended profiles are locked. Duplicate licenses return
+409 license_unavailable. With APP_DOCTOR_AUTO_VERIFY=true, approved identity
+edits stay approved even during active visits, and rejected resubmissions become
+approved. Pending edits still stay pending. Score and review state are read-only.
+Admin pending cards show the resubmission marker and date.
+
+Patient and doctor profile pages include current/new/confirmation password
+inputs. A successful change keeps the current cookie, invalidates other sessions
+and makes the old password unusable. Five wrong current-password attempts in
+15 minutes throttle password changes separately from login; the page shows the
+Retry-After delay. An incorrect current password stays on the form.
+Admin passwords come from APP_ADMIN_PASSWORD, and seeded doctors' passwords
+come from APP_DEMO_DOCTOR_PASSWORD; the UI cannot change them. A managed-account
+409 hides the password form and explains this restriction. Admin has no profile page.
+
+Not implemented: email/phone, email password reset, MFA, account recovery,
+doctor account deletion, profile change history/audit or profile photos.
 
 ## API
 
@@ -268,8 +311,17 @@ Public:
 
 Any logged-in role:
 - POST /v1/auth/logout -> 204; GET /v1/auth/me. Both require a valid cookie.
+- POST /v1/me/password {current_password,new_password} -> 204 for patient and
+  self-registered doctor accounts. Extras forbidden, new password 8–128 and different.
+  Wrong current password: 401 invalid_current_password; throttled: 429 with
+  Retry-After; admin/seed username: 409 password_managed. No cookie is replaced.
 
 Patient role:
+- GET/PATCH /v1/patient/profile -> {profile:{age,height_cm,weight_kg,
+  medical_history,medications,medication_history,food_allergies,allergies},updated_at,complete}.
+  Unset fields/timestamp are null. PATCH requires at least one field, forbids
+  extras/nulls, age integer 0–120, positive finite measurements and stripped
+  text 1–2000; medications changes recompute stored dictionary codes.
 - POST /v1/chat/sessions has no body and returns 201.
 - GET /v1/chat/sessions?limit=20 (1–50): newest-first conversation summaries
   {session_id, created_at, summary, step, done, emergency, status, specialty,
@@ -293,9 +345,17 @@ Patient role:
 - POST /v1/visit-requests/{id}/cancel -> updated item.
 
 Verified doctor role:
+- POST /v1/doctor/heartbeat, no body -> 204; the sole presence-refresh write.
 - PUT /v1/doctor/availability {available: bool}.
 - GET /v1/doctor/requests?status=pending|accepted; omitted status returns both.
 - POST /v1/doctor/requests/{id}/accept -> updated item; atomic first acceptance wins.
+
+Any doctor account, including unverified:
+- GET/PATCH /v1/doctor/profile -> {name_fa,specialty,expertise,license_number,
+  score,status,review_note,resubmitted_at}. PATCH accepts only name_fa (2–60),
+  expertise (2–3 strings, 2–40 each), specialty_code and the existing ASCII
+  license pattern; at least one field, stripped text, no extras/nulls. Doctor
+  status rules above apply; suspended edits return 403 profile_locked.
 
 Accepted patient or accepting verified doctor:
 - GET /v1/visit-requests/{id}/messages?after=0&limit=50 ->
@@ -324,7 +384,7 @@ Admin role only:
 - GET /v1/admin/doctors?status=pending&limit=50&offset=0 -> {items, total}.
   Status: pending|approved|rejected|suspended; limit 1–100, offset >=0.
   Items: {id, name_fa, specialty, expertise, license_number, registered_at,
-  status, reviewed_at, review_note}. Pending is oldest first; others newest review first.
+  status, reviewed_at, review_note, resubmitted_at}. Pending is oldest first; others newest review first.
 - POST /v1/admin/doctors/{id}/approve -> updated item; pending/rejected/suspended only.
 - POST /v1/admin/doctors/{id}/reject {note} -> updated item; pending only.
 - POST /v1/admin/doctors/{id}/suspend {note} -> updated item; approved only.
@@ -342,7 +402,7 @@ The optional uv command above loads .env before launch. See .env.example.
 - APP_COOKIE_SECURE: true/false, default false. Use true with HTTPS.
 - APP_SESSION_TTL_HOURS: integer 1-168, default 12.
 - APP_DEMO_DOCTOR_PASSWORD: optional 8-128 characters; excluded from repr.
-- APP_DOCTOR_AUTO_VERIFY: true/false, default false; applies at registration.
+- APP_DOCTOR_AUTO_VERIFY: true/false, default false; applies at registration and profile re-review/resubmission.
 - APP_REQUEST_TTL_MINUTES: integer 1-1440, default 30.
 - APP_ADMIN_USERNAME / APP_ADMIN_PASSWORD: optional pair; admin setup above.
 
@@ -358,12 +418,13 @@ $env:APP_DEMO_DOCTOR_PASSWORD = "synthetic-demo-password"
 ```
 
 doctors.json is seed data only: nine specialties and twelve fictional doctors.
-Startup validates/upserts them verified, preserving linked users. Optional seed
+Startup validates/upserts seed data, preserving linked users, their edited name,
+specialty/expertise and review state. Scores remain seed-managed. Optional seed
 accounts use usernames equal to JSON ids, e.g. demo_doctor_1 and demo_doctor_2.
 Setting the demo password creates/refreshes those account hashes. Without it,
 no seed accounts are created and seed account login/session use is disabled;
 existing account/link rows are preserved. Seed presence resets offline at startup
-until dashboards poll. Self-registered doctors are stored in SQLite, not JSON.
+until a verified account sends a heartbeat. Self-registered doctors are stored in SQLite, not JSON.
 
 Optional provider settings:
 - APP_LLM_BASE_URL: HTTP/HTTPS URL including any /v1 prefix, without credentials,
@@ -387,7 +448,7 @@ Doctor-only AI summary/considerations are never in patient triage responses.
 
 ## Storage, vocabulary and demo limits
 
-SQLite schema version 7 keeps the accounts, expanded intake and optional context,
+SQLite schema version 8 keeps the accounts, expanded intake and optional context,
 adds nullable visit_requests.ended_at and an indexed visit_messages table through
 atomic, version-gated additive migrations. Patient deletion cascades through
 visit requests to direct messages. Fresh and upgraded databases have the same
@@ -396,9 +457,12 @@ users to allow admin, preserves foreign-key references and indexes, and adds
 doctor review/license columns and admin_audit. A foreign_key_check must pass
 before commit; failures roll back and allow retry. Audit contains only admin/
 doctor ids, action, statuses, synthetic review note and timestamp, without foreign keys.
+The additive v8 migration adds patient_profiles with cascading ownership and
+one-time complete-profile backfill, plus doctors.resubmitted_at. It runs under
+BEGIN IMMEDIATE with rollback/retry and a version recheck for concurrent connections.
 Existing accounts, visits and messages are preserved; previously unanswered
-fields remain null. This upgrade does not require deleting a version-3 through v6 database.
-Connections enable foreign keys and secure_delete; normal version-7 connections
+fields remain null. This upgrade does not require deleting a version-3 through v7 database.
+Connections enable foreign keys and secure_delete; normal version-8 connections
 skip schema writes. Connections close explicitly; message and acceptance
 transactions are short. Explicit SQLite migrations cover these additions; use dedicated
 migration tooling when migrations grow. SQLite files/journals are ignored by Git.

@@ -64,9 +64,11 @@
 <body><div id="app-layout" class="app-layout sidebar-closed">
 <div class="banner">نسخهٔ نمایشی — فقط داده‌های ساختگی</div>
 <header class="topbar"><button id="menu-toggle" type="button" aria-expanded="false" aria-controls="shell-sidebar" aria-label="باز کردن فهرست">فهرست</button><h1 id="shell-title">پذیرش بیمار</h1><span id="display-name" class="display-name"></span><button id="logout" type="button" class="secondary">خروج</button></header>
-<aside id="shell-sidebar"><button id="reset" type="button">گفت‌وگوی جدید</button><nav id="shell-nav" aria-label="گفت‌وگوهای بیمار"></nav><div class="sidebar-extra"><button id="delete-account" type="button" disabled>حذف حساب و اطلاعات</button></div></aside>
+<aside id="shell-sidebar"><button id="reset" type="button">گفت‌وگوی جدید</button><nav id="shell-nav" aria-label="گفت‌وگوهای بیمار"></nav></aside>
 <button id="shell-backdrop" type="button" aria-label="بستن فهرست" hidden></button>
-<main id="shell-main" class="thread-main chat" aria-label="گفت‌وگوی پذیرش"><div class="thread-heading"><span id="status" role="status">در حال شروع...</span></div>
+<main id="shell-main" class="thread-main chat" aria-label="گفت‌وگوی پذیرش"><section id="profile-view" class="profile-view" hidden aria-label="پروفایل من">
+<section class="thread-card"><h2>پروفایل سلامت من</h2><p class="muted">فقط اطلاعات ساختگی وارد کنید. تغییرات برای ارزیابی‌های جدید است و گفت‌وگوهای قبلی را تغییر نمی‌دهد. این فرم غربالگری علائم اضطراری انجام نمی‌دهد.</p><p id="profile-empty" class="muted" hidden>پروفایل شما هنوز کامل نیست. می‌توانید اطلاعات را به‌تدریج ذخیره کنید؛ پس از تکمیل همهٔ موارد، ارزیابی جدید با مرور این اطلاعات شروع می‌شود.</p><p id="profile-load" role="status"></p><form id="patient-profile-form" novalidate><div id="profile-fields" class="profile-grid"></div><button id="save-profile" type="submit">ذخیرهٔ پروفایل</button><p id="profile-result" role="status"></p></form></section>
+<section id="password-section" class="thread-card"></section><section class="thread-card danger-section"><h2>حذف حساب و اطلاعات</h2><p>با حذف حساب، تمام ارزیابی‌ها، گفتگوها و پروفایل شما پاک می‌شود. این کار قابل بازگشت نیست.</p><button id="delete-account" type="button">حذف حساب و اطلاعات</button><p id="delete-error" class="error" role="alert"></p></section></section><div class="thread-heading"><span id="status" role="status">در حال شروع...</span></div>
 <div id="thread" class="thread-log" role="log" aria-live="polite" aria-label="پیام‌های گفت‌وگو"><details class="collected-summary thread-card"><summary>اطلاعات ثبت‌شده</summary><p class="muted">نام یا اطلاعات شناسایی وارد نکنید. واژه‌نامهٔ اولیه از نظر بالینی بررسی نشده است.</p><dl id="collected"></dl><div id="matched-symptoms" class="matches" role="list" aria-label="واژه‌های علائم شناسایی‌شده" aria-live="polite"></div><div id="matched-medicines" class="matches" role="list" aria-label="نام داروهای شناسایی‌شده" aria-live="polite"></div></details><p id="returning-note" hidden role="status">مراجعهٔ مجدد — اطلاعات قبلی را بررسی کنید.</p><div id="messages" class="intake-log"></div>        <section id="triage" class="thread-card" hidden aria-labelledby="triage-title">
           <h2 id="triage-title">پیشنهاد تخصص و پزشکان فرضی</h2>
           <p id="triage-status" role="status" aria-live="polite"></p>
@@ -255,7 +257,7 @@
       return card;
     }
     function sidebar() {
-      Shell.setItems([{group:"گفت‌وگوهای اخیر"},...conversations.map(item=>({id:item.session_id,hash:"#/c/"+item.session_id,label:item.summary||"گفت‌وگوی پذیرش",secondary:new Date(item.created_at).toLocaleString("fa-IR"),status:statusLabels[item.status],title:"گفت‌وگوی پذیرش"}))]);
+      Shell.setItems([{id:"profile",hash:"#/profile",label:"پروفایل من"},{group:"گفت‌وگوهای اخیر"},...conversations.map(item=>({id:item.session_id,hash:"#/c/"+item.session_id,label:item.summary||"گفت‌وگوی پذیرش",secondary:new Date(item.created_at).toLocaleString("fa-IR"),status:statusLabels[item.status],title:"گفت‌وگوی پذیرش"}))]);
     }
     function updateVisitButton() {
       const active=currentRequest&&["pending","accepted"].includes(currentRequest.status);
@@ -304,7 +306,7 @@
         const next=await request("/v1/chat/sessions?limit=50",undefined,"GET");
         const before=conversations.find(item=>item.session_id===current?.session_id),after=next.find(item=>item.session_id===current?.session_id);
         conversations=next;const snapshot=JSON.stringify(next);if(snapshot!==requestsSnapshot){requestsSnapshot=snapshot;sidebar();}
-        if(before&&after&&(before.status!==after.status||before.request_id!==after.request_id)){
+        if(location.hash.startsWith("#/c/")&&before&&after&&(before.status!==after.status||before.request_id!==after.request_id)){
           const version=routeVersion,detail=await request("/v1/chat/sessions/"+current.session_id,undefined,"GET");
           if(version===routeVersion)renderRequest(detail.request);
         }
@@ -565,6 +567,7 @@
       statusLine.textContent = "خطا در ارتباط";
     }
     async function openConversation(id) {
+      profileMode(false);
       const version=++routeVersion;liveChat?.dispose();liveChat=null;busy=true;controls();
       blocked=false;errorLine.textContent=requestsError.textContent="";currentRequest=null;messages.replaceChildren();liveLog.replaceChildren();endingLine.replaceChildren();endingLine.hidden=true;ownRequestList.replaceChildren();ownRequestList.hidden=true;
       confirmationCard=null;editingField=null;reviewEditing=false;draftSelections=[];input.value=contextInput.value="";clearTriage();
@@ -687,9 +690,62 @@
       if (busy || visitBusy || !confirm("حساب، اطلاعات و همهٔ گفتگوهای شما پاک شود؟ این کار قابل بازگشت نیست.")) return;
       busy=true;controls();
       try {await request("/v1/me",undefined,"DELETE");location.replace("/login");}
-      catch {errorLine.textContent="حذف حساب انجام نشد. دوباره تلاش کنید.";}
+      catch {document.getElementById("delete-error").textContent="حذف حساب انجام نشد. دوباره تلاش کنید.";}
       finally {busy=false;controls();}
     });
+
+    const profileView=document.getElementById("profile-view"),profileForm=document.getElementById("patient-profile-form"),profileResult=document.getElementById("profile-result");
+    const profileNames=["age","height_cm","weight_kg","medical_history","medications","medication_history","food_allergies","allergies"],profileFields={};
+    let profileValues={},profileSaving=false,profileLoading=false;
+    for(const name of profileNames){
+      const field=ProfileField(document.getElementById("profile-fields"),"profile-"+name,fieldLabels[name],{multiline:!profileNames.slice(0,3).includes(name)});
+      field.input.maxLength=name==="age"?3:profileNames.slice(1,3).includes(name)?100:2000;
+      if(profileNames.slice(0,3).includes(name))field.input.inputMode=name==="age"?"numeric":"decimal";
+      profileFields[name]=field;
+    }
+    PasswordForm(document.getElementById("password-section"));
+    function profileMode(show){
+      profileView.hidden=!show;document.getElementById("shell-main").classList.toggle("thread-main",!show);
+      document.getElementById("shell-main").setAttribute("aria-label",show?"پروفایل من":"گفت‌وگوی پذیرش");
+      for(const node of [document.querySelector(".thread-heading"),thread,document.querySelector(".composer")])node.hidden=show;
+    }
+    function fillProfile(result){
+      profileValues=result.profile;document.getElementById("profile-empty").hidden=result.complete;
+      for(const name of profileNames){profileFields[name].input.value=profileValues[name]??"";profileFields[name].invalid("");}
+    }
+    async function openProfile(){
+      const version=++routeVersion;liveChat?.dispose();liveChat=null;busy=false;controls();profileMode(true);profileResult.textContent="";
+      profileLoading=true;const load=document.getElementById("profile-load");load.textContent="در حال دریافت پروفایل...";document.getElementById("save-profile").disabled=true;
+      for(const field of Object.values(profileFields))field.input.disabled=true;
+      try{const result=await ProfileRequest("/v1/patient/profile");if(version!==routeVersion)return;fillProfile(result);load.textContent="";}
+      catch(error){if(version!==routeVersion)return;if(error.status===401)location.replace("/login");else load.textContent="دریافت پروفایل انجام نشد. صفحه را دوباره بارگذاری کنید.";}
+      finally{if(version===routeVersion){profileLoading=false;document.getElementById("save-profile").disabled=profileSaving;for(const field of Object.values(profileFields))field.input.disabled=profileSaving;}}
+    }
+    const asciiDigits=text=>text.replace(/[۰-۹٠-٩]/g,char=>"۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩".indexOf(char)%10).replaceAll("٫",".");
+    profileForm.addEventListener("submit",async event=>{
+      event.preventDefault();if(profileSaving)return;const changes={};profileResult.textContent="";
+      for(const name of profileNames){
+        const field=profileFields[name],text=field.input.value.trim();field.invalid("");
+        if(text===String(profileValues[name]??""))continue;
+        let value=text;
+        if(name==="age"){
+          const digits=asciiDigits(text);value=Number(digits);
+          if(!/^\d+$/.test(digits)||!Number.isInteger(value)||value<0||value>120)field.invalid("سن را به‌صورت عدد صحیح بین ۰ تا ۱۲۰ وارد کنید.");
+        }else if(["height_cm","weight_kg"].includes(name)){
+          const digits=asciiDigits(text);value=digits;
+          if(!/^(?:\d+(?:\.\d+)?|\.\d+)$/.test(digits)||!Number.isFinite(Number(digits))||Number(digits)<=0)field.invalid("عدد مثبت و محدود وارد کنید؛ برای اعشار از نقطه یا «٫» استفاده کنید.");
+        }else if(!text||[...text].length>2000)field.invalid("پاسخ باید ۱ تا ۲۰۰۰ نویسه باشد.");
+        changes[name]=value;
+      }
+      const invalid=Object.values(profileFields).find(field=>field.error.textContent);if(invalid){invalid.input.focus();return;}
+      if(!Object.keys(changes).length){profileResult.textContent="حداقل یک مورد را تغییر دهید و سپس ذخیره کنید.";return;}
+      const version=routeVersion;profileSaving=true;document.getElementById("save-profile").disabled=true;profileForm.setAttribute("aria-busy","true");
+      for(const field of Object.values(profileFields))field.input.disabled=true;
+      try{const result=await ProfileRequest("/v1/patient/profile",changes,"PATCH");if(version!==routeVersion)return;fillProfile(result);profileResult.className="success";profileResult.textContent="پروفایل ذخیره شد. تغییرات در ارزیابی جدید استفاده می‌شود.";}
+      catch(error){if(version!==routeVersion)return;if(error.status===401)location.replace("/login");else{profileResult.className="error";profileResult.textContent=error.status===422?"مقادیر واردشده را بررسی کنید.":"ذخیره تأیید نشد. اتصال را بررسی کنید؛ اطلاعات واردشده حفظ شده است.";}}
+      finally{profileSaving=false;document.getElementById("save-profile").disabled=profileLoading;for(const field of Object.values(profileFields))field.input.disabled=profileLoading;profileForm.setAttribute("aria-busy","false");}
+    });
+
     (async () => {
       try {
         const result=await request("/v1/auth/me",undefined,"GET");
@@ -698,7 +754,7 @@
         // ponytail: each dropdown is capped at 100 entries; add search when vocabulary grows beyond this.
         for(const [kind,step] of [["symptoms","symptoms"],["medicines","medications"]]){const data=await request("/v1/dictionaries/"+kind+"?limit=100",undefined,"GET");answerChoices[step]=[noMedicine,...data.entries.map(entry=>entry.name_fa),customAnswer];}
         conversations=await request("/v1/chat/sessions?limit=50",undefined,"GET");
-        Shell.init({title:"پذیرش بیمار",items:[],isRoute:hash=>/^#\/c\/[a-f0-9]{32}$/.test(hash)||hash==="#/new",defaultRoute:()=>conversations[0]?"#/c/"+conversations[0].session_id:"#/new",onRoute:hash=>{if(hash==="#/new")start();else openConversation(hash.slice(4));}});
+        Shell.init({title:"پذیرش بیمار",items:[],isRoute:hash=>/^#\/c\/[a-f0-9]{32}$/.test(hash)||["#/new","#/profile"].includes(hash),defaultRoute:()=>conversations[0]?"#/c/"+conversations[0].session_id:"#/new",onRoute:hash=>{if(hash==="#/profile")openProfile();else if(hash==="#/new")start();else openConversation(hash.slice(4));}});
         sidebar();if(conversations.some(item=>item.status==="pending"))requestsTimer=setTimeout(loadRequests,10000);
       } catch(error) {fail(error);}
     })();

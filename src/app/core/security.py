@@ -39,7 +39,7 @@ def token_hash(token: str) -> str:
 
 
 DUMMY_HASH = hash_password(secrets.token_urlsafe(32))
-# ponytail: bounded per-process login throttle (10000 usernames); use a shared rate limiter with auth across workers.
+# ponytail: bounded per-process login/password throttle (10000 keys); use a shared rate limiter with auth across workers.
 FAILURES: OrderedDict[str, deque] = OrderedDict()
 FAILURE_LOCK = Lock()
 FAILURE_WINDOW = 15 * 60

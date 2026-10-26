@@ -119,21 +119,28 @@ def _doctor_item(connection, row, doctor_id: str) -> dict:
 
 
 def doctor_requests(doctor_id: str, status: str | None = None) -> list[dict]:
-    expire_requests()
     with closing(db.connect()) as connection, connection:
-        connection.execute("BEGIN IMMEDIATE")
+        connection.execute("BEGIN")
         doctor = doctors.require_doctor(connection, doctor_id)
-        # ponytail: this GET heartbeat is the explicit presence side effect; use a dedicated heartbeat or push presence when scaling.
-        connection.execute("UPDATE doctors SET last_seen_at=? WHERE id=?", (db.utc_now(), doctor_id))
         rows = connection.execute(
             """SELECT * FROM visit_requests
-               WHERE ((status='pending' AND specialty_code=? AND ?=1)
+               WHERE ((status='pending' AND specialty_code=? AND ?=1 AND created_at>=?)
                       OR (status='accepted' AND doctor_id=?))
                  AND (? IS NULL OR status=?)
                ORDER BY created_at, rowid""",
-            (doctor["specialty_code"], doctor["available"], doctor_id, status, status),
+            (doctor["specialty_code"], doctor["available"], _cutoff(db.utc_now()), doctor_id, status, status),
         ).fetchall()
         return [_doctor_item(connection, row, doctor_id) for row in rows]
+
+
+def heartbeat(doctor_id: str) -> None:
+    with closing(db.connect()) as connection, connection:
+        connection.execute("BEGIN IMMEDIATE")
+        doctors.require_doctor(connection, doctor_id)
+        now = db.utc_now()
+        connection.execute("UPDATE doctors SET last_seen_at=? WHERE id=?", (now, doctor_id))
+        connection.execute("UPDATE visit_requests SET status='expired',updated_at=? WHERE status='pending' AND created_at<?",
+                           (now, _cutoff(now)))
 
 
 def accept(doctor_id: str, request_id: str) -> dict:

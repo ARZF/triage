@@ -7,9 +7,22 @@ move them into a dated version section when a release is made.
 
 ### Fixed
 
+- Keep verified doctors present with a dedicated visibility-independent heartbeat
+  and a 90-second online window; doctor request GETs no longer write presence/expiry.
+- Prevent completed stale intakes from overwriting a newer patient-profile edit;
+  reject an in-flight old-password login if credentials changed before session issuance.
+- Preserve linked seed doctors' edited profile fields during startup seeding.
+
 - Allow configured providers to retry stored triage fallbacks and upgrade them after valid output; preserve fallback on failure and never overwrite a stored LLM result, including concurrent retries.
 
 ### Added
+
+- Slice 7b: editable patient health and doctor profiles, own-profile endpoints,
+  Persian profile/password forms and admin resubmission markers.
+- Additive schema-v8 profile table/backfill and doctor resubmission timestamp,
+  with migration, validation, ownership, status, race and cascade checks.
+- Password change with current-password verification, separate throttling and
+  atomic revocation of other sessions while retaining the current cookie.
 
 - Slice 7a: read-only owned conversation list/detail endpoints, stored intake
   transcripts and triage, latest visit projections and lifecycle timestamps.
@@ -94,6 +107,14 @@ move them into a dated version section when a release is made.
 - Doctors now come from schema-v3 SQLite rows; doctors.json is seed data without online fields, online presence is computed and scores may be null. Reset the old disposable synthetic database once.
 
 ### Changed
+
+- New intakes prefill from saved complete profiles; profile edits preserve past
+  sessions/history/provider contexts. Doctor identity edits follow explicit
+  re-review/active-visit rules; suspended profiles stay locked.
+- Doctor identity polling is 15 seconds; request reads remain visible-only every
+  10 seconds, while heartbeat POSTs run every 20 seconds regardless of visibility.
+- Patient account deletion moves into the profile danger section. Admin and
+  seeded-doctor passwords remain managed by server configuration.
 
 - Patient loads resume the latest conversation; intake/review, triage, visit
   status and doctor messages now share one thread and bottom composer.

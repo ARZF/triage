@@ -25,6 +25,7 @@ STEPS = tuple(QUESTIONS)
 QUESTIONS["profile"] = "آیا سن، قد، وزن، سوابق، داروها و حساسیت‌های قبلی همچنان درست هستند؟ «بله» یا «خیر» بنویسید."
 PROFILE_FIELDS = ("age", "height_cm", "weight_kg", "medical_history", "medications", "medication_history", "food_allergies", "allergies")
 WELCOME = "خوش آمدید! این یک نسخهٔ نمایشی است؛ فقط از داده‌های ساختگی استفاده کنید. نام یا اطلاعات شناسایی وارد نکنید."
+PROFILE_WELCOME = "خوش آمدید! اطلاعات قبلی شما در این نسخهٔ نمایشی: "
 EMERGENCY_REPLY = "لطفاً همین حالا با خدمات اورژانس محل خود تماس بگیرید. این نسخهٔ نمایشی نمی‌تواند کمک اضطراری ارائه کند."
 COMPLETE_REPLY = "ثبت اطلاعات ساختگی به پایان رسید. این نسخهٔ نمایشی تشخیص یا توصیهٔ درمانی ارائه نمی‌کند."
 # ponytail: starter substring list needs clinical review; replace with clinically reviewed screening before clinical use.
@@ -69,8 +70,20 @@ def profile_state(prefill: Collected) -> IntakeState:
     labels = ("سن", "قد (سانتی‌متر)", "وزن (کیلوگرم)", "سابقه بیماری", "داروهایی که مصرف می‌کنید", "سابقه مصرف دارو", "حساسیت غذایی", "حساسیت دارویی / سایر حساسیت‌ها")
     details = "؛ ".join(f"{label}: {getattr(prefill, name)}" for name, label in zip(PROFILE_FIELDS, labels))
     details = details.translate(str.maketrans("0123456789", "۰۱۲۳۴۵۶۷۸۹"))
-    reply = "خوش آمدید! اطلاعات قبلی شما در این نسخهٔ نمایشی: " + details + ". " + QUESTIONS["profile"]
+    reply = PROFILE_WELCOME + details + ". " + QUESTIONS["profile"]
     return IntakeState(step="profile", collected=prefill, reply=reply)
+
+
+def parse_measurement(value: str | int | float) -> float:
+    if type(value) in (int, float):
+        number = float(str(value))
+    elif isinstance(value, str) and re.fullmatch(r"(?:\d+(?:[.٫]\d+)?|[.٫]\d+)", value.strip()):
+        number = float(value.strip().replace("٫", "."))
+    else:
+        raise ValueError("عدد مثبت وارد کنید؛ برای اعشار از نقطه یا «٫» استفاده کنید.")
+    if not math.isfinite(number) or number <= 0:
+        raise ValueError("عدد مثبت و محدود وارد کنید.")
+    return number
 
 
 def advance(state: IntakeState, message: str) -> tuple[IntakeState, str]:
@@ -90,12 +103,10 @@ def advance(state: IntakeState, message: str) -> tuple[IntakeState, str]:
         else:
             hint = "عدد صحیح بین ۰ تا ۱۲۰ وارد کنید." if step == "age" else "عدد صحیح بین ۱ تا ۱۰ وارد کنید."
     elif step in ("height_cm", "weight_kg"):
-        if re.fullmatch(r"(?:\d+(?:[.٫]\d+)?|[.٫]\d+)", answer):
-            value = float(answer.replace("٫", "."))
-            if not math.isfinite(value) or value <= 0:
-                hint = "عدد مثبت و محدود وارد کنید."
-        else:
-            hint = "عدد مثبت وارد کنید؛ برای اعشار از نقطه یا «٫» استفاده کنید."
+        try:
+            value = parse_measurement(answer)
+        except ValueError as error:
+            hint = str(error)
     elif step in ("confirm", "profile"):
         if normalized not in ("yes", "no", "بله", "خیر", "نه"):
             hint = "لطفاً «بله» یا «خیر» بنویسید."

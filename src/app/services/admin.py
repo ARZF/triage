@@ -36,7 +36,7 @@ def _item(row) -> dict:
     return {"id": row["id"], "name_fa": row["name_fa"], "specialty": specialty(row["specialty_code"]),
             "expertise": json.loads(row["expertise"]), "license_number": row["license_number"],
             "registered_at": row["created_at"], "status": row["review_status"],
-            "reviewed_at": row["reviewed_at"], "review_note": row["review_note"]}
+            "reviewed_at": row["reviewed_at"], "review_note": row["review_note"], "resubmitted_at": row["resubmitted_at"]}
 
 
 def list_doctors(status: str, limit: int, offset: int) -> dict:

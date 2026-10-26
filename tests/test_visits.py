@@ -36,7 +36,7 @@ class VisitTests(unittest.TestCase):
             self.addCleanup(client.close)
         self.doctor_rows = [register_doctor(client) for client in self.doctor_clients]
         for client in self.doctor_clients:
-            self.assertEqual(client.get("/v1/doctor/requests").status_code, 200)
+            self.assertEqual(client.post("/v1/doctor/heartbeat").status_code, 204)
 
     def complete(self, triage=True, additional_context="رد کردن"):
         response = self.patient.post("/v1/chat/sessions")
@@ -162,13 +162,13 @@ class VisitTests(unittest.TestCase):
 
     def test_no_online_doctor_and_presence_boundaries(self):
         state = self.complete()
-        self.clock.return_value = "2030-01-01T00:00:45.000000+00:00"
+        self.clock.return_value = "2030-01-01T00:01:29.000000+00:00"
         online = doctors.for_specialty("general_practice")
         self.assertEqual(sum(item["online"] for item in online), 2)
-        self.clock.return_value = "2030-01-01T00:00:45.000001+00:00"
+        self.clock.return_value = "2030-01-01T00:01:31.000000+00:00"
         self.assertFalse(any(item["online"] for item in doctors.for_specialty("general_practice")))
         self.assert_conflict(self.patient.post("/v1/visit-requests", json={"session_id": state["session_id"]}), "no_online_doctor")
-        self.assertEqual(self.doctor_clients[0].get("/v1/doctor/requests").status_code, 200)
+        self.assertEqual(self.doctor_clients[0].post("/v1/doctor/heartbeat").status_code, 204)
         self.assertEqual(sum(item["online"] for item in doctors.for_specialty("general_practice")), 1)
         self.create_request(state)
 
@@ -248,18 +248,18 @@ class VisitTests(unittest.TestCase):
         self.assert_conflict(self.doctor_clients[0].post(f"/v1/doctor/requests/{request['id']}/accept"), "request_not_pending")
         self.assert_conflict(self.patient.post(f"/v1/visit-requests/{request['id']}/cancel"), "request_not_pending")
         self.assertEqual(self.patient.get("/v1/visit-requests").json()[0]["status"], "expired")
-        self.doctor_clients[0].get("/v1/doctor/requests")
+        self.doctor_clients[0].post("/v1/doctor/heartbeat")
         replacement = self.create_request(state)
         self.assertNotEqual(replacement["id"], request["id"])
 
-    def test_request_ttl_configuration_and_list_sweeps(self):
+    def test_request_ttl_configuration_and_read_only_list(self):
         with patch.dict(os.environ, {"APP_REQUEST_TTL_MINUTES": "1"}):
             request = self.create_request(self.complete())
             self.clock.return_value = "2030-01-01T00:01:00.000001+00:00"
             self.assertEqual(self.doctor_clients[1].get("/v1/doctor/requests").json(), [])
             self.assertEqual(self.patient.get("/v1/visit-requests").json()[0]["status"], "expired")
         with closing(db.connect()) as connection:
-            self.assertEqual(connection.execute("SELECT status FROM visit_requests WHERE id=?", (request["id"],)).fetchone()[0], "expired")
+            self.assertEqual(connection.execute("SELECT status FROM visit_requests WHERE id=?", (request["id"],)).fetchone()[0], "pending")
 
     def test_doctor_list_online_score_null_order_and_nullable_response(self):
         with closing(db.connect()) as connection, connection:
