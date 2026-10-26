@@ -86,6 +86,9 @@ move them into a dated version section when a release is made.
 
 ### Changed
 
+- Label the doctor registration identifier «شماره نظام پزشکی» consistently in
+  signup/admin UI, keeping synthetic-only notices and the license_number contract.
+
 - Doctor accounts expose review status/note; pending, rejected and suspended
   dashboards hide patient UI and poll for review changes. Admins are denied all
   patient/doctor data routes, and login/page redirects now handle three roles.

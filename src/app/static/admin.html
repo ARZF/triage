@@ -20,7 +20,7 @@ form{padding:16px;background:var(--tint);border-radius:8px;margin-top:16px}label
 <div class="banner">دموی آزمایشی — فقط اطلاعات ساختگی</div>
 <main class="shell">
 <header><div><h1>مدیریت ثبت‌نام پزشکان</h1><p id="pending-count" role="status">در حال دریافت تعداد درخواست‌ها...</p></div><button id="logout" type="button" class="secondary">خروج</button></header>
-<p class="muted">این بخش فقط برای بررسی ثبت‌نام پزشکان است. شماره‌های مجوز ساختگی و راستی‌آزمایی‌نشده‌اند.</p>
+<p class="muted">این بخش فقط برای بررسی ثبت‌نام پزشکان است. شماره‌های نظام پزشکی در این دمو ساختگی و راستی‌آزمایی‌نشده‌اند.</p>
 <nav class="tabs" aria-label="وضعیت ثبت‌نام و رویدادها">
 <button type="button" data-tab="pending" aria-pressed="true">در انتظار بررسی</button>
 <button type="button" data-tab="approved" aria-pressed="false">تأییدشده</button>
@@ -80,7 +80,7 @@ function doctorCard(doctor){
   const card=document.createElement("article"),heading=document.createElement("h2"),details=document.createElement("dl"),actions=document.createElement("div");card.className="card";card.dataset.doctorId=doctor.id;heading.textContent=doctor.name_fa;card.append(heading);
   paragraph(card,doctor.specialty.name_fa);
   const tags=document.createElement("div");for(const phrase of doctor.expertise){const chip=document.createElement("span");chip.className="chip";chip.textContent=phrase;tags.append(chip);}card.append(tags);
-  for(const [label,text] of [["مجوز ساختگی",doctor.license_number||"دادهٔ اولیه؛ بدون شمارهٔ مجوز"],["تاریخ ثبت‌نام",new Date(doctor.registered_at).toLocaleString("fa-IR")],["وضعیت",statusNames[doctor.status]],["آخرین بررسی",doctor.reviewed_at?new Date(doctor.reviewed_at).toLocaleString("fa-IR"):"هنوز بررسی نشده"]]){const field=document.createElement("div"),term=document.createElement("dt"),value=document.createElement("dd");term.textContent=label;value.textContent=text;field.append(term,value);details.append(field);}card.append(details);
+  for(const [label,text] of [["شماره نظام پزشکی",doctor.license_number||"دادهٔ اولیه؛ بدون شماره نظام پزشکی"],["تاریخ ثبت‌نام",new Date(doctor.registered_at).toLocaleString("fa-IR")],["وضعیت",statusNames[doctor.status]],["آخرین بررسی",doctor.reviewed_at?new Date(doctor.reviewed_at).toLocaleString("fa-IR"):"هنوز بررسی نشده"]]){const field=document.createElement("div"),term=document.createElement("dt"),value=document.createElement("dd");term.textContent=label;value.textContent=text;field.append(term,value);details.append(field);}card.append(details);
   if(doctor.review_note)paragraph(card,"یادداشت مدیر: "+doctor.review_note);
   actions.className="actions";
   const allowed=doctor.status==="approved"?["suspend"]:doctor.status==="pending"?["approve","reject"]:["approve"];

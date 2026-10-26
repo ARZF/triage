@@ -48,6 +48,8 @@ name, a specialty, two or three short expertise phrases and a unique synthetic
 license_number: 4–20 ASCII letters/digits/hyphens, stripped. Missing/invalid
 licenses return 422; duplicates return 409 license_unavailable. These demo
 numbers are fake and unverified; this is not real license verification.
+The signup and admin pages label this field «شماره نظام پزشکی»; the API/storage
+name remains license_number, with the same synthetic-demo validation.
 
 Doctor accounts start unverified unless APP_DOCTOR_AUTO_VERIFY=true at
 registration. APP_DOCTOR_AUTO_VERIFY=true is a local-demo shortcut that skips

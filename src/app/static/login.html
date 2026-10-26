@@ -32,8 +32,8 @@ p,dd,pre,h3{overflow-wrap:anywhere;white-space:pre-wrap}dt{font-size:14px;color:
 <select id="role"><option value="patient">بیمار آزمایشی</option><option value="doctor">پزشک آزمایشی</option></select>
 <fieldset id="doctor-fields" hidden disabled>
 <label for="name-fa">نام نمایشی فرضی</label><input id="name-fa" minlength="2" maxlength="60" required autocomplete="off">
-<label for="license-number">شمارهٔ مجوز ساختگی</label><input id="license-number" required minlength="4" maxlength="20" pattern="[A-Za-z0-9-]{4,20}" dir="ltr" autocomplete="off" aria-describedby="license-help">
-<p id="license-help" class="muted">فقط شمارهٔ ساختگی وارد کنید؛ ۴ تا ۲۰ حرف انگلیسی، عدد یا خط تیره. مجوزها در این دمو راستی‌آزمایی نمی‌شوند.</p>
+<label for="license-number">شماره نظام پزشکی</label><input id="license-number" required minlength="4" maxlength="20" pattern="[A-Za-z0-9-]{4,20}" dir="ltr" autocomplete="off" aria-describedby="license-help">
+<p id="license-help" class="muted">فقط شماره نظام پزشکی ساختگی وارد کنید؛ ۴ تا ۲۰ حرف انگلیسی، عدد یا خط تیره. شماره‌ها در این دمو راستی‌آزمایی نمی‌شوند.</p>
 <label for="specialty">تخصص</label><select id="specialty" required><option value="">در حال دریافت تخصص‌ها...</option></select>
 <label for="expertise-1">حوزهٔ کاری اول (ساختگی)</label><input id="expertise-1" required minlength="2" maxlength="40" autocomplete="off">
 <label for="expertise-2">حوزهٔ کاری دوم (ساختگی)</label><input id="expertise-2" required minlength="2" maxlength="40" autocomplete="off">
@@ -62,7 +62,7 @@ function mode(value){
 }
 loginTab.addEventListener("click",()=>mode(false));registerTab.addEventListener("click",()=>mode(true));role.addEventListener("change",()=>mode(registering));
 function message(status,code){
-  if(code==="license_unavailable")return "این شمارهٔ مجوز ساختگی در دسترس نیست.";
+  if(code==="license_unavailable")return "این شماره نظام پزشکی ساختگی در دسترس نیست.";
   return {401:"نام کاربری یا گذرواژه درست نیست.",403:"دسترسی مجاز نیست.",409:"این نام کاربری در دسترس نیست.",422:"اطلاعات واردشده را بررسی کنید.",429:"تلاش‌های ناموفق زیاد بوده است. کمی بعد دوباره امتحان کنید."}[status]||"ارتباط برقرار نشد. دوباره تلاش کنید.";
 }
 form.addEventListener("submit",async event=>{
