@@ -1,6 +1,6 @@
 # Healthcare Agent: Implementation Plan and Specification
 
-Status: Slices 1a, 2a, 2b, 3, 4, 5 and 6 approved. Intake, vocabulary, memory, specialty triage, accounts, visits, direct text chat and admin doctor review are in scope; future workflow decisions remain proposals.
+Status: Slices 1a, 2a, 2b, 3, 4, 5, 6 and 7a approved. Intake, vocabulary, memory, specialty triage, accounts, visits, direct text chat, admin doctor review and shared conversation dashboards are in scope; future workflow decisions remain proposals.
 
 ## 1. Purpose
 
@@ -19,6 +19,7 @@ at a time, with an explicit API contract and a runnable check for its behavior.
 - Schema v5 adds optional doctor-only context, explicitly excluded from current/prior provider inputs. Final review is an inline Persian card with validated field-specific corrections before confirmation.
 - Schema v6 adds visit end timestamps and indexed direct messages. Patient request/message polling is read-only; the doctor alone ends an accepted visit without removing its history.
 - Schema v7 adds the configured admin role, synthetic license numbers, doctor review states and a review-only audit. Suspension also ends the doctor's open visits. Admins cannot access patient data.
+- Slice 7a adds read-only conversation list/detail routes, shared CSS/JS dashboard assets and one continuous patient/doctor thread. Page loads resume existing conversations. Schema remains v7.
 - `src/app/core/config.py` defines frozen settings read from `os.environ`. `APP_LOG_LEVEL` defaults to `INFO`; INFO, WARNING, ERROR, and CRITICAL are accepted (case insensitive). Invalid values fail startup. The application does not load `.env` files.
 
 ## 3. Project boundaries
@@ -37,6 +38,7 @@ at a time, with an explicit API contract and a runnable check for its behavior.
 - The doctor-only context/inline review feature supersedes the preceding intake's final steps and schema version: optional additional_context precedes confirm; corrections reuse the message route without another endpoint.
 - Slice 5 supersedes earlier direct-chat exclusions, schema version and patient-list expiry writes. It uses only existing approved folders; no folders or dependencies are added.
 - Slice 6 supersedes earlier admin exclusions, doctor registration requirements and schema version. Review audit is implemented; patient/chat audit remains excluded. It reuses existing folders and dependencies.
+- Slice 7a supersedes earlier self-contained dashboard, history-aside and visit-chat-panel descriptions. Only shell.css and shell.js are new files; no folders, dependencies or schema changes. Login remains unchanged.
 
 ## 4. Decisions for persistence and future slices
 
@@ -309,6 +311,38 @@ Complete this section for each agreed feature before writing its code:
 - **Runnable check:** unittest before/after with temporary databases and no network, config/seeding/license/role/transition/audit/concurrency/migration rollback and preservation checks; reinstall editable package and browser walkthrough with distinct synthetic accounts. Report actual private-window and browser limitations.
 - **NOT implemented:** real license verification, admin user management and self-service password reset, multi-admin roles, admin MFA, per-IP rate limiting, alerting on admin actions.
 
+### Feature: Slice 7a — shared dashboard shell and continuous conversations
+
+- **Status:** approved.
+- **User outcome:** resume an existing conversation and continue intake, triage, requesting, acceptance and direct chat in one thread; navigate patient, doctor and admin dashboards through a shared accessible RTL sidebar.
+- **Scope:** add only static/shell.css and static/shell.js in existing folders. Reuse current tokens/type, auth, intake/review/editing, triage, visit and chat rules. No schema changes, dependencies, profile/password features or login-page changes.
+- **API contract:** patient-only GET /v1/chat/sessions?limit=20 (1–50) returns newest-first {session_id,created_at,summary,step,done,emergency,status,specialty,request_id} items. Summary is first 80 characters of complaint, otherwise symptoms, otherwise null. One joined SQL query with the latest request per session; no per-item queries. GET /v1/chat/sessions/{id}, owned_session protected, returns {session:ChatResponse,transcript:[{role,content,created_at}] in stored order/max 200,triage:TriageResponse|null,request:PatientVisit|null}. Stored triage only through patient_response, never run_triage/provider or doctor-only fields. Unknown/other-patient -> 404; doctor/admin -> 403. Both GETs are read-only and no-store.
+- **Visit projections:** PatientVisit adds session_id, accepted_at and ended_at; DoctorVisit adds accepted_at and ended_at. Nullable timestamps reflect existing stored data; no writes or schema changes.
+- **Status precedence:** emergency intake wins; otherwise use the latest request (accepted becomes ended when ended_at exists); overdue pending projects expired with the same TTL cutoff without writes; then done -> triage, else intake. Specialty is stored triage specialty, otherwise latest request specialty, otherwise null.
+
+| Status | Persian label |
+| --- | --- |
+| intake | در حال ارزیابی |
+| triage | پیشنهاد پزشک |
+| pending | در انتظار پزشک |
+| accepted | در گفت‌وگو با پزشک |
+| ended | ویزیت پایان‌یافته |
+| expired | منقضی‌شده |
+| cancelled | لغوشده |
+| emergency | توقف اضطراری |
+
+- **Shared shell:** explicit allowlisted GET /assets/shell.css (text/css) and /assets/shell.js (text/javascript), Cache-Control:no-cache; unknown/traversal -> 404 ErrorResponse. Package CSS/JS. Role-neutral Shell API handles top bar, display name/logout slot, labeled sidebar nav, active links and hash/back/forward/default routing. Desktop >=900px defaults open and safely persists toggle preference; mobile defaults closed without persistence, inline-start drawer/backdrop/Esc/focus trap/focus return/body scroll lock. Respect reduced motion and visible keyboard focus. Use existing forest tokens/system fonts; no design.md or additional design files/folders.
+- **Patient routes and loading:** #/new and #/c/<session_id>; list, new-conversation button and confirmed account deletion in sidebar. On load list then reopen newest; create only if none. Confirm leaving an unfinished intake for New, retaining it in the list. Refresh after state changes and every 10 seconds while visible if anything is pending. Keep history API but stop calling it in the UI.
+- **Thread order:** collected-data disclosure first, then stored/live intake bubbles and editable inline final review, one in-place triage bot card with doctor cards/retry/request, request/cancel/expiry/re-request system item, acceptance/doctor profile item, direct messages, finally ended system line/New CTA. One scrollable log and one composer whose modes are intake, triage/waiting, doctor chat, read-only ended/full/emergency. Keep required Persian copy and synthetic/emergency notices.
+- **Doctor routes:** #/queue and #/patient/<request_id>. Sidebar queue badge, accepted active-first/ended-last visits with urgency/specialty/age/symptom excerpt, availability/presence and name. Accept opens thread; conflict refreshes queue. Thread starts with «گزارش سامانهٔ پذیرش» and accepting-doctor-only fields/history/AI warning, followed by direct messages and end confirmation. Keep 10-second heartbeat poll and five-second review-status poll; unapproved states have no patient UI.
+- **Admin routes:** #/pending, #/approved, #/rejected, #/suspended, #/audit. Existing tabs become sidebar items; preserve notes/confirmations/paging/conflict refresh and 15-second visible polling.
+- **Failure behavior:** chat retains 3-second visible/open-only cursor polling, deduplication, has_more catch-up, consecutive-error 10-second backoff, uncertain-POST draft preservation/no automatic resend, status errors, 500-message cap and 2000-character bound. Stop polling on navigation; avoid late responses updating another thread. Scroll only near bottom or for own sends. Preserve drafts/scroll across list refreshes. All dynamic text uses textContent; no HTML injection/eval APIs.
+- **Access and data handling:** synthetic data only; owned conversations and existing accepted participants only, no other-user identifiers in responses. Shared assets contain no credentials or role-specific policy. Existing auth redirects/logging/no-store remain in force.
+- **Configuration:** none; existing .env/uv launch path and Settings behavior unchanged.
+- **Acceptance examples:** reload mid-intake resumes without another session; sidebar switches thread and pauses old chat polling; full patient/doctor flow stays in one thread; ended history is readable; keyboard/mobile drawer and admin routes work.
+- **Runnable check:** baseline/final unittest discovery with temporary databases/no network; add list/detail/status/ownership/stored-triage/redaction/read-only/visit-field/asset/static checks to existing test files. Reinstall and test real browser at 1280/390px plus smaller responsive widths; report unverified cases.
+- **NOT implemented:** unread counts, push, per-conversation deletion, conversation search, unfinished-session cleanup/caps, profile or password features (Slice 7b).
+
 ## 6. Coding and verification rules
 
 - Trace the affected flow and callers before changing shared behavior.
@@ -362,7 +396,8 @@ current. Report any unverified behavior or remaining limitations explicitly.
 - `src/app/schemas/triage.py` and `src/app/data/doctors.json`: triage contracts and synthetic doctors.
 - `tests/test_llm.py` and `tests/test_triage.py`: network-free Slice 3 checks.
 - `src/app/core/logging_config.py`: logging configuration and shared access-log disabling at import and lifespan startup.
-- `src/app/api/health.py`: health endpoint. `chat.py` adds the two /v1/chat POST routes; `demo.py` serves /demo.
+- `src/app/api/health.py`: health endpoint. `chat.py` provides intake/triage POSTs and owned read-only conversation list/detail GETs; `demo.py` serves the pages and two explicit no-cache shared assets.
+- `src/app/static/shell.css`, `shell.js`: shared RTL dashboard navigation, responsive drawer and reusable direct-chat rendering; packaged alongside HTML. Login remains self-contained.
 - `src/app/schemas/common.py`: `HealthResponse`, `ErrorResponse`, and its nested error model.
 - `src/app/services/chats.py`, `api/chats.py`, `schemas/chats.py`: accepted-visit participation, message pagination/insertion and doctor-controlled ending; distinct from scripted intake in api/chat.py.
 - `src/app/services/visits.py`, `schemas/visits.py`: read-only patient expiry projection, doctor heartbeat/sweep, broadcast/acceptance and ended visit items.
@@ -856,3 +891,82 @@ Files changed:
 - src/app/static/admin.html (new), login.html, doctor.html and index.html.
 - tests/test_admin.py (new), helpers.py, test_auth.py, test_chats.py,
   test_persistence.py and test_triage.py.
+
+## 21. Slice 7a implementation and verification (2026-10-26)
+
+- [x] Specify Slice 7a as approved in section 5 before implementation.
+- [x] Add owned read-only conversation list/detail APIs, joined list query,
+  stored-only patient triage, ordered/redacted transcript and latest request.
+- [x] Expose existing session/lifecycle fields in visit projections; retain schema v7.
+- [x] Package and explicitly serve shell.css/shell.js with no-cache; no directory mount.
+- [x] Use one role-neutral RTL shell and shared cursor-chat renderer, preserving
+  forest colors/fonts, desktop preference and an accessible mobile drawer.
+- [x] Resume patient conversations; keep summary, intake/review, triage, visit
+  state, direct messages and ending in one log with one composer.
+- [x] Move doctor queue/active-ended visits and admin status/audit navigation
+  into the sidebar, retaining heartbeat/review/polling and permission gates.
+- [x] Preserve returning profiles, multi-item choices, review corrections,
+  doctor-only optional notes, red flags, request rules and read-only ended history.
+- [x] Update existing tests, README, structure and changelog. No new folders,
+  dependencies, profile/password features, database schema changes or commits.
+
+PowerShell verification from the repository root:
+
+```text
+.\.venv\Scripts\python.exe -m unittest discover tests
+Before editing: Ran 155 tests in 106.225s — OK
+After implementation: Ran 162 tests in 83.571s — OK
+
+.\.venv\Scripts\python.exe -m pip install -e .
+Successfully built healthcare-agent
+Successfully installed healthcare-agent-0.1.0
+```
+
+Seven added tests cover list status precedence/order/limits/summary/ownership,
+one-query loading, latest request and stored-specialty precedence, read-only
+snapshots, configured-provider non-invocation for stored LLM/fallback results,
+transcript cap/order/redaction, lifecycle timestamps and asset allowlisting.
+Existing UI-delivery assertions now require the shared local assets; login
+remains self-contained. Static checks reject unsafe HTML/text execution APIs.
+Node syntax checks pass for shell.js and all three dashboard inline scripts;
+git diff --check passes. The installed Starlette/httpx deprecation warning remains.
+Editable package sources include both shared assets. The prior authorized
+process-only NO_PROXY bypass was restored after installation.
+
+Started using the README's uv --env-file command, with --port 8002 and a unique
+temporary APP_DB_PATH plus synthetic admin overrides, auto-verification off and
+provider configuration disabled. Existing listeners/databases and the ignored
+.env were left untouched. /health, /docs, /demo, /doctor and /admin returned 200;
+shell.css and shell.js returned 200 with text/css and text/javascript respectively,
+both Cache-Control:no-cache. The temporary verification server was stopped.
+
+Real-browser automation used isolated localhost cookie origins for patient,
+doctor and admin tabs. At 1280px it verified new patient registration, full
+intake, dropdown/review edit cancellation, automatic fallback triage, pending
+doctor approval and automatic unlock, visit broadcast, queue-to-thread acceptance,
+two-way messages and inline ending. Patient and doctor reloads retained their
+conversation routes. At 390px a returning-profile intake resumed mid-way after
+reload, then completed through request, acceptance, two-way multiline chat and
+ending. Old visits reopened read-only, Back returned to the newer thread, and
+confirmed New retained unfinished intakes in the sidebar. Doctor labels, matched
+chips, fixed AI/emergency notices and the doctor-only note were displayed.
+
+Desktop keyboard collapse expanded main to full width and survived reload.
+Mobile defaults closed; keyboard opening, forward/backward focus wrap, Escape,
+visible close control, focus return, background scroll lock and close-on-link
+were checked. Admin status/audit sidebar navigation worked at desktop/mobile
+widths. No horizontal overflow at 1280, 390, 320, 375, 414 and 768px. Final
+desktop/mobile screenshots were saved outside the repository.
+
+Unverified in the browser: literal separate/private windows (isolated cookie
+origins were used), forced offline/ambiguous-send/backoff timing, hidden-tab
+poll timing, unavailable localStorage, 500-message UI saturation, expiry/409
+conflict races and multi-page admin paging. Existing/new API tests cover the
+corresponding server rules where applicable. No live provider or real patient
+data was used. Stop after Slice 7a; do not commit or push.
+
+Files changed: README.md, docs/plan.md, docs/changelog.md, pyproject.toml;
+agent/sessions.py, api/chat.py, api/demo.py, schemas/chat.py, schemas/visits.py,
+services/visits.py under src/app; static/index.html, doctor.html, admin.html,
+shell.css and shell.js; tests/test_chat_api.py, test_visits.py, test_auth.py and
+test_admin.py. Only shell.css and shell.js are new files.

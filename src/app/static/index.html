@@ -1,53 +1,6 @@
 <!doctype html>
-<html lang="fa" dir="rtl">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>نمایش گفت‌وگوی پذیرش بیمار · دستیار سلامت</title>
-  <style>
-    /* Hallmark — macrostructure: workspace — tone: quiet utility — anchor hue: forest */
-    :root {
-      --paper: #f5f5ef; --surface: #fff; --ink: #203b35; --muted: #576b64;
-      --line: #d5ddd5; --accent: #245d48; --tint: #eaf1e9; --danger: #9c2929;
-      --space-sm: 8px; --space-md: 16px; --space-lg: 24px; --space-xl: 32px;
-      --font-body: Tahoma, "Segoe UI", sans-serif; --font-display: var(--font-body);
-    }
-    * { box-sizing: border-box; }
-    body { margin: 0; background: var(--paper); color: var(--ink); font-family: var(--font-body); line-height: 1.55; }
-    button, input, select, textarea { font: inherit; }
-    button { min-height: 44px; padding: 8px 20px; border: 1px solid var(--accent); border-radius: 6px; background: var(--accent); color: var(--surface); cursor: pointer; white-space: nowrap; }
-    button:hover:not(:disabled) { filter: brightness(.9); }
-    button:disabled { opacity: .5; cursor: default; }
-    :focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
-    .banner { padding: 10px var(--space-md); text-align: center; background: var(--ink); color: var(--surface); font-weight: 650; }
-    .shell { max-width: 1120px; margin: auto; padding: var(--space-xl) var(--space-lg); }
-    header { display: flex; justify-content: space-between; align-items: center; gap: var(--space-md); margin-bottom: var(--space-lg); }
-    h1 { margin: 0; font: 500 clamp(28px, 5vw, 40px)/1.2 var(--font-display); }
-    header p { color: var(--muted); margin: var(--space-sm) 0 0; }
-    .actions { display: flex; gap: var(--space-sm); flex-wrap: wrap; }
-    #delete-account { background: transparent; color: var(--danger); border-color: var(--danger); }
-    #returning-note { padding: var(--space-md); border: 1px solid var(--line); background: var(--tint); }
-    #history { margin-top: var(--space-lg); border-top: 1px solid var(--line); padding-top: var(--space-md); }
-    #history summary { cursor: pointer; min-height: 44px; }
-    .history-visit { border-top: 1px solid var(--line); padding: var(--space-md) 0; }
-    .history-visit p { margin: var(--space-sm) 0; overflow-wrap: anywhere; }
-    .history-chips { display: flex; flex-wrap: wrap; gap: var(--space-sm); }
-    #reset { color: var(--ink); background: transparent; border-color: var(--line); }
-    main { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: var(--space-lg); align-items: start; }
-    .chat, aside { min-width: 0; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
-    .chat-heading { display: flex; gap: var(--space-md); justify-content: space-between; border-bottom: 1px solid var(--line); padding: var(--space-md) var(--space-lg); }
-    #status { color: var(--muted); font-size: 14px; }
-    #messages { height: 420px; overflow-y: auto; padding: var(--space-lg); display: flex; flex-direction: column; gap: var(--space-md); }
-    .bubble { max-width: 90%; margin: 0; padding: 12px 16px; border-radius: 8px; white-space: pre-wrap; overflow-wrap: anywhere; }
-    .bot { align-self: flex-start; background: var(--tint); }
-    .user { align-self: flex-end; color: var(--surface); background: var(--accent); }
-    form { padding: var(--space-md) var(--space-lg) var(--space-lg); border-top: 1px solid var(--line); }
-    label { display: block; font-size: 14px; font-weight: 650; margin-bottom: var(--space-sm); }
-    .compose { display: flex; gap: var(--space-sm); }
-    input, select, textarea { width: 100%; min-width: 0; min-height: 46px; border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; color: var(--ink); background: var(--surface); }
-    input:disabled, select:disabled { background: var(--paper); }
-    #answer-choice { margin-bottom: var(--space-sm); }
-    .medicines-step .compose { flex-wrap: wrap; }
+<html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>پذیرش بیمار · دستیار سلامت</title>
+<link rel="stylesheet" href="/assets/shell.css"><style>    .medicines-step .compose { flex-wrap: wrap; }
     .medicines-step .compose input { flex-basis: 100%; }
     .medicines-step .compose button { flex: 1; }
     #medicine-editor { margin-bottom: var(--space-md); }
@@ -57,13 +10,6 @@
     #medicine-list span { overflow-wrap: anywhere; min-width: 0; }
     #medicine-list button { background: transparent; color: var(--ink); border-color: var(--line); padding: 4px 12px; }
     #choice-help { margin: 0 0 var(--space-md); color: var(--muted); font-size: 14px; }
-    #error { color: var(--danger); margin: var(--space-sm) 0 0; overflow-wrap: anywhere; }
-    #error:empty { display: none; }
-    aside { padding: var(--space-lg); }
-    h2 { font: 500 25px var(--font-display); margin: 0 0 var(--space-sm); }
-    aside p, footer { color: var(--muted); font-size: 14px; }
-    aside p { margin: 0 0 var(--space-md); }
-    dl { margin: 0; }
     .field { border-top: 1px solid var(--line); padding: 12px 0; }
     dt { font-size: 13px; color: var(--muted); }
     dd { margin: 4px 0 0; overflow-wrap: anywhere; white-space: pre-wrap; }
@@ -72,16 +18,6 @@
     .chip { background: var(--tint); border: 1px solid var(--line); border-radius: 16px; padding: 4px 12px; font-size: 14px; overflow-wrap: anywhere; }
     .vocabulary-note { margin-top: var(--space-md); }
     footer { margin-top: var(--space-md); }
-
-    #triage { border-top: 1px solid var(--line); padding: var(--space-lg); }
-    #triage h2 { font-size: 22px; }
-    #triage-status, #triage-details p { overflow-wrap: anywhere; white-space: pre-wrap; }
-    #triage-retry { margin-top: var(--space-sm); }
-    .urgency, .online { display: inline-block; padding: 4px 10px; border-radius: 16px; background: var(--tint); margin-bottom: var(--space-sm); }
-    .urgency[data-level="urgent"], .urgency[data-level="emergency"] { background: #f8e8e6; color: var(--danger); }
-    .doctor-card { border: 1px solid var(--line); border-radius: 8px; margin-top: var(--space-md); padding: var(--space-md); }
-    .doctor-card h3 { margin: 0 0 var(--space-sm); font-size: 18px; }
-    .doctor-expertise { display: flex; flex-wrap: wrap; gap: var(--space-sm); }
 
     /* Hallmark · component: inline review · genre: modern-minimal · theme: existing forest
      * states: default · hover · focus · active · disabled · loading · error · success
@@ -117,64 +53,30 @@
     .review-card button:active:not(:disabled), .secondary:active:not(:disabled) { background: var(--tint); color: var(--ink); }
     .review-card button:disabled { cursor: not-allowed; }
     input[aria-invalid="true"], textarea[aria-invalid="true"] { border-color: var(--danger); }
-    .chat.reviewing #messages { height: auto; overflow: visible; }
+
     .review-transcript summary { min-height: 44px; cursor: pointer; color: var(--muted); }
-    .review-transcript > div { max-height: 420px; overflow-y: auto; display: flex; flex-direction: column; gap: var(--space-md); padding-block: var(--space-md); }
+    .review-transcript > div {  display: flex; flex-direction: column; gap: var(--space-md); padding-block: var(--space-md); }
     @media (hover: hover) { .review-card .secondary:hover:not(:disabled), textarea:hover:not(:disabled) { background: var(--tint); color: var(--ink); } }
     @media (max-width: 480px) { .review-card { padding: var(--space-md); } .review-fields { grid-template-columns: minmax(0, 1fr); } .review-actions { flex-direction: column; align-items: stretch; } }
 
-    @media (max-width: 720px) {
-      .shell { padding: var(--space-lg) var(--space-md); }
-      header { flex-direction: column; align-items: stretch; }
-      .actions button { flex: 1; }
-      main { grid-template-columns: minmax(0, 1fr); }
-      #messages { height: 340px; padding: var(--space-md); }
-      form, .chat-heading { padding: var(--space-md); }
-      #status { max-width: 50%; text-align: end; }
-      .bubble { max-width: 96%; }
-    }
-/* Visit chat: scoped styles keep intake controls and dashboard refreshes independent. */
-.visit-chat {margin-top:16px;border-top:1px solid var(--line);padding-top:12px;min-width:0;}
-.visit-chat summary {cursor:pointer;min-height:44px;font-weight:650;}
-.visit-chat-banner,.visit-chat-note {padding:12px;border:1px solid var(--line);border-radius:8px;background:var(--tint);color:var(--ink);font-size:14px;overflow-wrap:anywhere;}
-.visit-chat-log {height:280px;overflow-y:auto;overscroll-behavior:contain;border:1px solid var(--line);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:12px;}
-.visit-chat-message {align-self:flex-start;max-width:90%;flex-shrink:0;border-radius:10px;padding:10px 12px;background:var(--tint);color:var(--ink);min-width:0;}
-.visit-chat-message.own {align-self:flex-end;background:var(--accent);color:var(--surface);}
-.visit-chat-message p {margin:4px 0;white-space:pre-wrap;overflow-wrap:anywhere;}
-.visit-chat-message small,.visit-chat-message time {font-size:12px;display:block;}
-.visit-chat label {display:block;margin:12px 0 8px;font-size:14px;}
-.visit-chat textarea {font:inherit;width:100%;min-width:0;min-height:96px;resize:vertical;border:1px solid var(--line);border-radius:8px;padding:12px;background:var(--surface);color:var(--ink);}
-.visit-chat-actions {display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-top:8px;}
-.visit-chat-count {font-size:13px;color:var(--muted);}
-.visit-chat button {font:inherit;min-height:44px;padding:8px 12px;border:1px solid var(--accent);border-radius:6px;background:var(--accent);color:var(--surface);cursor:pointer;white-space:nowrap;}
-.visit-chat .visit-chat-secondary {background:var(--surface);color:var(--accent);margin-top:8px;}
-.visit-chat button:disabled,.visit-chat textarea:disabled {opacity:.6;cursor:not-allowed;}
-.visit-chat-error {color:var(--danger);font-size:14px;overflow-wrap:anywhere;white-space:pre-wrap;}
-.visit-chat-error:empty {display:none;}
-.visit-chat-end {padding:12px;border:1px solid var(--line);border-radius:8px;margin-top:8px;}
-.visit-chat-end button {margin:4px;}
-.visit-chat textarea[aria-invalid="true"] {border-color:var(--danger);}
-.visit-chat :focus-visible {outline:3px solid var(--accent);outline-offset:3px;}
-@media(max-width:480px){.visit-chat-log{height:240px;}.visit-chat-message{max-width:96%;}.visit-chat-end button{margin-inline:0;}}
 
-</style>
-</head>
-<body>
-  <div class="banner">نسخهٔ نمایشی — فقط داده‌های ساختگی</div>
-  <div class="shell">
-    <header>
-      <div><h1>پذیرش بیمار</h1><p>گفت‌وگویی از پیش تعیین‌شده؛ فقط از اطلاعات ساختگی استفاده کنید.</p></div>
-      <div class="actions"><button id="reset" type="button">شروع دوباره</button>
-        <button id="delete-account" type="button" disabled>حذف حساب و اطلاعات من</button>
-        <button id="logout" type="button">خروج</button>
-      </div>
-    </header>
-    <p id="returning-note" hidden role="status">مراجعهٔ مجدد — اطلاعات قبلی را بررسی کنید.</p>
-    <main>
-      <section class="chat" aria-label="گفت‌وگوی پذیرش">
-        <div class="chat-heading"><strong>گفت‌وگو</strong><span id="status" role="status">در حال شروع...</span></div>
-        <div id="messages" role="log" aria-live="polite" aria-label="پیام‌های گفت‌وگو"></div>
-        <form id="chat-form">
+#choice-help,#note-help{font-size:13px;color:var(--muted);margin:4px 0 8px}#delete-account{color:var(--danger);background:var(--surface);border-color:var(--danger)}.review-transcript>div{display:flex;flex-direction:column;gap:16px;padding-block:12px}.field{border-block-start:1px solid var(--line);padding-block:10px}#returning-note{padding:12px;background:var(--tint);border-radius:8px}#error{color:var(--danger);margin:4px 0}#error:empty{display:none}.review-card{padding:20px}#answer-choice{margin-block-end:8px}</style></head>
+<body><div id="app-layout" class="app-layout sidebar-closed">
+<div class="banner">نسخهٔ نمایشی — فقط داده‌های ساختگی</div>
+<header class="topbar"><button id="menu-toggle" type="button" aria-expanded="false" aria-controls="shell-sidebar" aria-label="باز کردن فهرست">فهرست</button><h1 id="shell-title">پذیرش بیمار</h1><span id="display-name" class="display-name"></span><button id="logout" type="button" class="secondary">خروج</button></header>
+<aside id="shell-sidebar"><button id="reset" type="button">گفت‌وگوی جدید</button><nav id="shell-nav" aria-label="گفت‌وگوهای بیمار"></nav><div class="sidebar-extra"><button id="delete-account" type="button" disabled>حذف حساب و اطلاعات</button></div></aside>
+<button id="shell-backdrop" type="button" aria-label="بستن فهرست" hidden></button>
+<main id="shell-main" class="thread-main chat" aria-label="گفت‌وگوی پذیرش"><div class="thread-heading"><span id="status" role="status">در حال شروع...</span></div>
+<div id="thread" class="thread-log" role="log" aria-live="polite" aria-label="پیام‌های گفت‌وگو"><details class="collected-summary thread-card"><summary>اطلاعات ثبت‌شده</summary><p class="muted">نام یا اطلاعات شناسایی وارد نکنید. واژه‌نامهٔ اولیه از نظر بالینی بررسی نشده است.</p><dl id="collected"></dl><div id="matched-symptoms" class="matches" role="list" aria-label="واژه‌های علائم شناسایی‌شده" aria-live="polite"></div><div id="matched-medicines" class="matches" role="list" aria-label="نام داروهای شناسایی‌شده" aria-live="polite"></div></details><p id="returning-note" hidden role="status">مراجعهٔ مجدد — اطلاعات قبلی را بررسی کنید.</p><div id="messages" class="intake-log"></div>        <section id="triage" class="thread-card" hidden aria-labelledby="triage-title">
+          <h2 id="triage-title">پیشنهاد تخصص و پزشکان فرضی</h2>
+          <p id="triage-status" role="status" aria-live="polite"></p>
+          <div id="triage-details"></div>
+          <button id="request-visit" type="button" disabled aria-describedby="visit-help">درخواست ویزیت آنلاین</button>
+          <p id="visit-help" role="status">پس از تکمیل ارزیابی و دریافت پیشنهاد تخصص می‌توانید درخواست بدهید.</p>
+          <button id="triage-retry" type="button" hidden>تلاش دوباره</button>
+        </section>
+<section id="request-line" class="system-item" hidden></section><div id="live-messages" class="thread-segment"></div><section id="visit-ending" class="ended-item" hidden></section></div>
+<div class="composer"><p id="requests-error" class="error" role="alert"></p><p id="composer-note" class="composer-note" hidden></p>        <form id="chat-form">
           <label for="answer-choice">انتخاب پاسخ</label>
           <select id="answer-choice" disabled aria-describedby="choice-help"></select>
           <p id="choice-help">از فهرست انتخاب کنید یا پاسخ را در کادر زیر بنویسید.</p>
@@ -194,168 +96,8 @@
           <button id="edit-cancel" type="button" class="secondary" hidden>انصراف از ویرایش</button>
           <p id="error" role="alert"></p>
         </form>
-        <section id="triage" hidden aria-labelledby="triage-title">
-          <h2 id="triage-title">پیشنهاد تخصص و پزشکان فرضی</h2>
-          <p id="triage-status" role="status" aria-live="polite"></p>
-          <div id="triage-details"></div>
-          <button id="request-visit" type="button" disabled aria-describedby="visit-help">درخواست ویزیت آنلاین</button>
-          <p id="visit-help" role="status">پس از تکمیل ارزیابی و دریافت پیشنهاد تخصص می‌توانید درخواست بدهید.</p>
-          <button id="triage-retry" type="button" hidden>تلاش دوباره</button>
-        </section>
-      </section>
-      <aside aria-labelledby="collected-title">
-        <h2 id="collected-title">اطلاعات ثبت‌شده</h2>
-        <p>پاسخ‌ها به‌تدریج اینجا نمایش داده می‌شوند. نام یا اطلاعات شناسایی وارد نکنید.</p>
-        <dl id="collected"></dl>
-        <div id="matched-symptoms" class="matches" role="list" aria-label="واژه‌های علائم شناسایی‌شده" aria-live="polite"></div>
-        <div id="matched-medicines" class="matches" role="list" aria-label="نام داروهای شناسایی‌شده" aria-live="polite"></div>
-<details id="my-requests" open>
-          <summary>درخواست‌های من</summary>
-          <p id="requests-error" class="error" role="alert"></p>
-          <div id="own-requests" aria-live="polite"></div>
-        </details>
-        <details id="history">
-          <summary>مراجعات قبلی</summary>
-          <div id="visit-history" aria-live="polite"></div>
-        </details>
-        <p class="vocabulary-note">فهرست واژگان اولیه است و از نظر بالینی بررسی نشده است.</p>
-      </aside>
-    </main>
-    <footer>این دموی آزمایشی تشخیص یا درمان ارائه نمی‌کند. فقط از اطلاعات ساختگی استفاده کنید. حذف حساب، اطلاعات و درخواست‌های شما را پاک می‌کند.</footer>
-  </div>
-  <script>
-
-// ponytail: mirrored inline on two self-contained pages; extract a shared asset when a static-asset route is approved.
-function createVisitChat(requestId, role, initiallyEnded) {
-  const panel=document.createElement("details"), summary=document.createElement("summary");
-  panel.className="visit-chat"; panel.dataset.chatId=requestId;
-  summary.textContent=role==="patient"?"گفت‌وگو با پزشک":"گفت‌وگو با بیمار";
-  const banner=document.createElement("p"); banner.className="visit-chat-banner";
-  banner.textContent="این گفتگو برای موارد اورژانسی نیست؛ در شرایط اورژانسی با خدمات اورژانس تماس بگیرید";
-  const log=document.createElement("div"); log.className="visit-chat-log"; log.setAttribute("role","log"); log.setAttribute("aria-live","polite"); log.setAttribute("aria-label","پیام‌های ویزیت"); log.tabIndex=0;
-  const note=document.createElement("p"), error=document.createElement("p"), label=document.createElement("label");
-  note.className="visit-chat-note"; note.setAttribute("role","status");
-  error.className="visit-chat-error"; error.setAttribute("role","alert"); error.id="visit-error-"+requestId;
-  const input=document.createElement("textarea"); input.id="visit-input-"+requestId; input.rows=3; input.dir="auto"; input.autocomplete="off";
-  input.placeholder="پیام ساختگی خود را بنویسید..."; label.htmlFor=input.id; label.textContent="پیام شما";
-  const counter=document.createElement("span"); counter.id="visit-count-"+requestId; counter.className="visit-chat-count";
-  input.setAttribute("aria-describedby",counter.id+" "+error.id);
-  const send=document.createElement("button"); send.type="button"; send.textContent="ارسال پیام";
-  const actions=document.createElement("div"); actions.className="visit-chat-actions"; actions.append(counter,send);
-  panel.append(summary,banner,log,note,label,input,actions,error);
-  let ended=Boolean(initiallyEnded), full=false, unavailable=false, sending=false, ending=false, reading=false, cursor=0, timer=null, failures=0, endedHistoryLoaded=false;
-  const seen=new Set(), messageNodes=new Map();
-  const endButton=document.createElement("button"), confirmation=document.createElement("div"), endYes=document.createElement("button"), endNo=document.createElement("button");
-  if(role==="doctor"){
-    endButton.type=endYes.type=endNo.type="button"; endButton.textContent="پایان ویزیت"; endButton.className="visit-chat-secondary";
-    confirmation.hidden=true; confirmation.className="visit-chat-end";
-    const question=document.createElement("p"); question.textContent="با پایان ویزیت، ارسال پیام برای هر دو طرف بسته می‌شود. ویزیت پایان یابد؟";
-    endYes.textContent="تأیید پایان ویزیت"; endNo.textContent="انصراف"; endNo.className="visit-chat-secondary";
-    confirmation.append(question,endYes,endNo); panel.append(endButton,confirmation);
-    endButton.addEventListener("click",()=>{confirmation.hidden=false;endYes.focus();});
-    endNo.addEventListener("click",()=>{confirmation.hidden=true;endButton.focus();});
-    endYes.addEventListener("click",async()=>{
-      if(ending||sending||ended)return;
-      ending=true;error.textContent="";controls();
-      try{await call("/end","POST");setEnded(true);confirmation.hidden=true;await poll();}
-      catch(reason){showError(reason);}
-      finally{ending=false;controls();}
-    });
-  }
-  function controls(){
-    const locked=ended||full||unavailable||sending||ending;
-    const length=[...input.value.trim()].length;
-    input.disabled=locked;send.disabled=locked||!length||length>2000;
-    send.textContent=sending?"در حال ارسال...":"ارسال پیام";
-    counter.textContent=length.toLocaleString("fa-IR")+" / ۲۰۰۰";
-    input.setAttribute("aria-invalid",String(length>2000));
-    note.hidden=!ended&&!full;
-    note.textContent=ended?"این ویزیت پایان یافته است. ارسال پیام بسته است؛ تاریخچهٔ گفتگو همچنان قابل مشاهده است.":full?"ظرفیت ۵۰۰ پیام این گفتگو تکمیل شده است. تاریخچه قابل مشاهده است.":"";
-    endButton.hidden=ended;endButton.disabled=unavailable||sending||ending;endYes.disabled=endNo.disabled=sending||ending;
-    panel.setAttribute("aria-busy",String(sending||ending));
-    summary.textContent=(role==="patient"?"گفت‌وگو با پزشک":"گفت‌وگو با بیمار")+(ended?" · پایان‌یافته":"");
-  }
-  function setEnded(value){ended=ended||Boolean(value);if(ended)confirmation.hidden=true;controls();}
-  function active(){return panel.open&&!document.hidden&&panel.isConnected&&panel.getClientRects().length>0&&!unavailable;}
-  function pause(){clearTimeout(timer);timer=null;}
-  function schedule(delay=failures>=2?10000:3000){pause();if(active()&&(!ended||!endedHistoryLoaded))timer=setTimeout(poll,delay);}
-  async function call(suffix,method="GET",body){
-    const response=await fetch("/v1/visit-requests/"+encodeURIComponent(requestId)+suffix,{
-      method,credentials:"same-origin",headers:body?{"Content-Type":"application/json"}:{},
-      body:body?JSON.stringify(body):undefined,signal:AbortSignal.timeout(10000)
-    });
-    if(response.status===401){location.replace("/login");throw Object.assign(Error(),{status:401});}
-    if(!response.ok){
-      let code;try{code=(await response.json()).error?.code;}catch{}
-      throw Object.assign(Error(),{status:response.status,code});
-    }
-    return response.json();
-  }
-  function showError(reason,posting=false){
-    if(reason.status===401)return;
-    if(reason.status===404){unavailable=true;pause();}
-    if(reason.code==="visit_ended")setEnded(true);
-    if(reason.code==="chat_full")full=true;
-    error.textContent=reason.status===404?"این گفتگو در دسترس نیست."
-      :reason.code==="visit_ended"?"ویزیت پایان یافته است؛ ارسال پیام ممکن نیست."
-      :reason.code==="chat_full"?"ظرفیت ۵۰۰ پیام گفتگو تکمیل شده است."
-      :reason.status===422?"پیام باید بین ۱ تا ۲۰۰۰ نویسه باشد."
-      :posting?"ارسال تأیید نشد؛ ممکن است پیام ثبت شده باشد. متن حفظ شده است؛ تاریخچه را بررسی کنید و در صورت نیاز دوباره بفرستید."
-      :"ارتباط برقرار نشد. دریافت پیام‌ها به‌طور خودکار دوباره انجام می‌شود.";
-    controls();
-  }
-  function append(message){
-    if(seen.has(message.id))return;
-    const follow=log.scrollHeight-log.scrollTop-log.clientHeight<64||message.sender===role;
-    const node=document.createElement("article");node.className="visit-chat-message"+(message.sender===role?" own":"");
-    const who=document.createElement("small"), text=document.createElement("p"), time=document.createElement("time");
-    who.textContent=message.sender===role?"شما":message.sender==="doctor"?"پزشک":"بیمار";
-    text.textContent=message.content;text.dir="auto";
-    time.dateTime=message.created_at;time.textContent=new Date(message.created_at).toLocaleString("fa-IR");
-    node.append(who,text,time);
-    const next=[...messageNodes.keys()].sort((a,b)=>a-b).find(id=>id>message.id);
-    log.insertBefore(node,next===undefined?null:messageNodes.get(next));messageNodes.set(message.id,node);seen.add(message.id);
-    if(seen.size>=500)full=true;
-    if(follow)log.scrollTop=log.scrollHeight;
-  }
-  async function poll(){
-    pause();if(!active()||reading)return;
-    reading=true;
-    try{
-      let more;
-      do{
-        const page=await call("/messages?after="+cursor+"&limit=100");
-        for(const message of page.messages)append(message);
-        if(page.messages.length)cursor=page.messages[page.messages.length-1].id;
-        setEnded(page.ended);more=page.has_more;
-        endedHistoryLoaded=page.ended&&!more;
-      }while(more&&active());
-      failures=0;error.textContent="";controls();
-    }catch(reason){failures++;showError(reason);}
-    finally{reading=false;schedule();}
-  }
-  async function post(){
-    const content=input.value.trim();
-    if(sending||ending||ended||full||unavailable||!content||[...content].length>2000)return;
-    sending=true;error.textContent="";controls();
-    try{
-      const message=await call("/messages","POST",{content});
-      append(message);input.value="";failures=0;await poll();
-    }catch(reason){
-      // ponytail: POST timeouts have ambiguous outcomes; add idempotency keys before automatic message resending.
-      showError(reason,true);schedule();
-    }finally{sending=false;controls();}
-  }
-  input.addEventListener("input",controls);
-  input.addEventListener("keydown",event=>{if(event.key==="Enter"&&!event.shiftKey&&!event.isComposing){event.preventDefault();post();}});
-  send.addEventListener("click",post);
-  panel.addEventListener("toggle",()=>{if(panel.open)poll();else pause();});
-  const visibility=()=>{if(document.hidden)pause();else poll();};
-  document.addEventListener("visibilitychange",visibility);
-  controls();
-  return {element:panel,list:log,setEnded,resume:()=>schedule(0),dispose:()=>{pause();document.removeEventListener("visibilitychange",visibility);}};
-}
-
+<div id="live-composer"></div></div></main></div>
+<script src="/assets/shell.js"></script><script>
     const input = document.getElementById("message");
     const contextInput = document.getElementById("patient-context");
     const noteHelp = document.getElementById("note-help");
@@ -387,8 +129,6 @@ function createVisitChat(requestId, role, initiallyEnded) {
     const deleteAccount = document.getElementById("delete-account");
     const logout = document.getElementById("logout");
     const returningNote = document.getElementById("returning-note");
-    const historyPanel = document.getElementById("history");
-    const visitHistory = document.getElementById("visit-history");
     answerChoices.profile = answerChoices.confirm;
     const messages = document.getElementById("messages");
     const errorLine = document.getElementById("error");
@@ -407,7 +147,6 @@ function createVisitChat(requestId, role, initiallyEnded) {
       document.getElementById("collected").append(row);
       fields[name] = value;
     }
-    let historyVersion = 0;
     let current = null;
     let busy = false;
     let blocked = false;
@@ -450,13 +189,8 @@ function createVisitChat(requestId, role, initiallyEnded) {
       triageStatus.textContent = "";
       triageRetry.hidden = true;
     }
-    async function loadTriage(state) {
-      triagePanel.hidden = false;
-      triageDetails.replaceChildren();
-      triageRetry.hidden = true;
-      triageStatus.textContent = "در حال آماده‌سازی پیشنهاد تخصص...";
-      try {
-        const result = await request("/v1/chat/sessions/" + encodeURIComponent(state.session_id) + "/triage", undefined, "POST", 125000);
+    function renderTriage(result) {
+      triagePanel.hidden=false;triageDetails.replaceChildren();triageRetry.hidden=true;
         triageStatus.textContent = result.source === "fallback" ? "پیشنهاد عمومی؛ نتیجه‌ای از هوش مصنوعی دریافت نشد." : "پیشنهاد تخصص آماده است.";
         const specialty = document.createElement("h3");
         specialty.textContent = result.specialty.name_fa;
@@ -477,28 +211,38 @@ function createVisitChat(requestId, role, initiallyEnded) {
         lastTriage=result;
         if(!result.emergency&&!result.doctors.some(doctor=>doctor.online))triageRetry.hidden=false;
         updateVisitButton();
+    }
+    async function loadTriage(state) {
+      const version=routeVersion;
+      triagePanel.hidden=false;triageRetry.hidden=true;
+      triageStatus.textContent="در حال آماده‌سازی پیشنهاد تخصص...";
+      composerNote.hidden=false;composerNote.textContent="در حال آماده‌سازی پیشنهاد تخصص؛ لطفاً صبر کنید.";
+      try {
+        const result=await request("/v1/chat/sessions/"+encodeURIComponent(state.session_id)+"/triage",undefined,"POST",125000);
+        if(version!==routeVersion)return;
+        renderTriage(result);await loadRequests();
       } catch {
-        triageStatus.textContent = "دریافت پیشنهاد انجام نشد. دوباره تلاش کنید.";
-        triageRetry.hidden = false;
+        if(version!==routeVersion)return;
+        triageStatus.textContent="دریافت پیشنهاد انجام نشد. دوباره تلاش کنید.";triageRetry.hidden=false;
       }
     }
     triageRetry.addEventListener("click", async () => {
       if (busy || !current?.done || current.emergency) return;
+      const version=routeVersion;
       busy = true;
       triageRetry.disabled = true;
       controls();
       try { await loadTriage(current); }
-      finally { busy = false; triageRetry.disabled = false; controls(); }
+      finally { if(version===routeVersion){busy = false; triageRetry.disabled = false; controls();} }
     });
 
-    const visitButton = document.getElementById("request-visit");
-    const visitHelp = document.getElementById("visit-help");
-    const ownRequestList = document.getElementById("own-requests");
-    const requestsError = document.getElementById("requests-error");
-    let lastTriage = null, ownRequests = [], visitBusy = false, requestsLoading = false, requestsTimer = null;
-    const requestSessions = new Map();
-    const visitChats = new Map();
-    let requestsSnapshot = null;
+    const visitButton=document.getElementById("request-visit"),visitHelp=document.getElementById("visit-help");
+    const ownRequestList=document.getElementById("request-line"),requestsError=document.getElementById("requests-error");
+    const thread=document.getElementById("thread"),liveLog=document.getElementById("live-messages"),composer=document.getElementById("live-composer");
+    const composerNote=document.getElementById("composer-note"),endingLine=document.getElementById("visit-ending");
+    let lastTriage=null,visitBusy=false,requestsLoading=false,requestsAgain=false,requestsTimer=null;
+    let conversations=[],currentRequest=null,liveChat=null,routeVersion=0,requestsSnapshot="";
+    const statusLabels={intake:"در حال ارزیابی",triage:"پیشنهاد پزشک",pending:"در انتظار پزشک",accepted:"در گفت‌وگو با پزشک",ended:"ویزیت پایان‌یافته",expired:"منقضی‌شده",cancelled:"لغوشده",emergency:"توقف اضطراری"};
     function doctorCard(doctor) {
       const card = document.createElement("article");card.className = "doctor-card";
       const name = document.createElement("h3");name.textContent = doctor.name_fa;
@@ -510,119 +254,72 @@ function createVisitChat(requestId, role, initiallyEnded) {
       for (const text of doctor.expertise) {const tag=document.createElement("span");tag.className="chip";tag.textContent=text;tags.append(tag);}card.append(tags);
       return card;
     }
+    function sidebar() {
+      Shell.setItems([{group:"گفت‌وگوهای اخیر"},...conversations.map(item=>({id:item.session_id,hash:"#/c/"+item.session_id,label:item.summary||"گفت‌وگوی پذیرش",secondary:new Date(item.created_at).toLocaleString("fa-IR"),status:statusLabels[item.status],title:"گفت‌وگوی پذیرش"}))]);
+    }
     function updateVisitButton() {
-      const active = ownRequests.some(item => requestSessions.get(item.id) === current?.session_id && ["pending","accepted"].includes(item.status));
-      visitButton.disabled = busy || visitBusy || !lastTriage || lastTriage.emergency || !lastTriage.doctors.some(doctor => doctor.online) || active;
-      visitHelp.textContent = active ? "برای این ارزیابی درخواست فعال دارید؛ وضعیت آن در درخواست‌های من نمایش داده می‌شود."
-        : lastTriage?.emergency ? "در وضعیت اورژانسی درخواست ویزیت از این دمو ممکن نیست."
-        : lastTriage && !lastTriage.doctors.some(doctor => doctor.online) ? "پزشک آنلاینی در فهرست نیست. پس از آنلاین شدن پزشک، پیشنهاد را به‌روزرسانی کنید."
-        : lastTriage ? "درخواست برای پزشکان آنلاین این تخصص ارسال می‌شود؛ اولین پزشک آن را می‌پذیرد."
-        : "پس از تکمیل ارزیابی و دریافت پیشنهاد تخصص می‌توانید درخواست بدهید.";
+      const active=currentRequest&&["pending","accepted"].includes(currentRequest.status);
+      visitButton.disabled=busy||visitBusy||!lastTriage||lastTriage.emergency||!lastTriage.doctors.some(doctor=>doctor.online)||Boolean(active);
+      visitHelp.textContent=active?"درخواست این گفت‌وگو ثبت شده است.":lastTriage?.emergency?"در وضعیت اورژانسی درخواست ویزیت از این دمو ممکن نیست.":lastTriage&&!lastTriage.doctors.some(doctor=>doctor.online)?"پزشک آنلاینی در فهرست نیست. پس از آنلاین شدن پزشک، پیشنهاد را به‌روزرسانی کنید.":lastTriage?"درخواست برای پزشکان آنلاین این تخصص ارسال می‌شود؛ اولین پزشک آن را می‌پذیرد.":"پس از تکمیل ارزیابی و دریافت پیشنهاد تخصص می‌توانید درخواست بدهید.";
+      composerNote.hidden=!current?.done||currentRequest?.status==="accepted";
+      composerNote.textContent=currentRequest?.status==="pending"?"در انتظار پذیرش پزشک؛ ارسال پیام پس از پذیرش فعال می‌شود.":current?.emergency?"این پذیرش به دلیل وضعیت اضطراری متوقف شد.":"پذیرش تکمیل شده است؛ پیشنهاد تخصص را بررسی کنید و درخواست ویزیت بدهید.";
+    }
+    function showEnded() {
+      if(endingLine.childElementCount)return;
+      const text=document.createElement("p"),again=document.createElement("button");
+      text.textContent="پزشک این ویزیت را پایان داد. ارسال پیام بسته شد.";again.type="button";again.textContent="گفت‌وگوی جدید";again.addEventListener("click",()=>Shell.navigate("#/new"));endingLine.append(text,again);endingLine.hidden=false;
+    }
+    function renderRequest(item) {
+      const follow=thread.scrollHeight-thread.scrollTop-thread.clientHeight<64;
+      currentRequest=item;ownRequestList.replaceChildren();
+      if(item){
+        const text=document.createElement("p");
+        if(item.status==="pending"){
+          text.textContent="درخواست ویزیت برای پزشکان آنلاین "+item.specialty.name_fa+" ارسال شد. اولین پزشکی که بپذیرد با شما گفت‌وگو می‌کند.";
+          const cancel=document.createElement("button");cancel.type="button";cancel.className="secondary";cancel.dataset.requestAction="cancel";cancel.textContent="لغو درخواست";
+          cancel.addEventListener("click",async()=>{
+            if(visitBusy)return;const version=routeVersion;visitBusy=true;controls();
+            try{const result=await request("/v1/visit-requests/"+encodeURIComponent(item.id)+"/cancel");if(version===routeVersion)renderRequest(result);}
+            catch{if(version===routeVersion)requestsError.textContent="لغو درخواست انجام نشد؛ ممکن است پزشک آن را پذیرفته باشد.";}
+            finally{visitBusy=false;await loadRequests();controls();}
+          });ownRequestList.append(text,cancel);
+        }else if(["expired","cancelled"].includes(item.status)){
+          text.textContent=item.status==="expired"?"هیچ پزشکی در مدت مجاز پاسخ نداد. می‌توانید دوباره درخواست دهید.":"درخواست ویزیت لغو شد.";
+          const again=document.createElement("button");again.type="button";again.dataset.requestAction="again";again.textContent="درخواست دوباره";again.addEventListener("click",()=>requestVisit());ownRequestList.append(text,again);
+        }else if(item.status==="accepted"){
+          text.textContent=(item.doctor?.name_fa||"پزشک")+" درخواست شما را پذیرفت. از همین‌جا می‌توانید با پزشک گفت‌وگو کنید.";ownRequestList.append(text);
+          if(item.doctor)ownRequestList.append(doctorCard(item.doctor));
+          if(!liveChat){liveChat=VisitThread({requestId:item.id,ownSender:"patient",initiallyEnded:item.ended,otherLabel:item.doctor?.name_fa||"پزشک",scroll:thread,logParent:liveLog,composer,onEnded:()=>{showEnded();loadRequests();}});}
+          liveChat.setEnded(item.ended);if(item.ended)showEnded();
+        }
+      }
+      ownRequestList.hidden=!item;updateVisitButton();if(follow)thread.scrollTop=thread.scrollHeight;
     }
     async function loadRequests() {
       clearTimeout(requestsTimer);
-      if (requestsLoading) return;
-      if (document.hidden) {requestsTimer=setTimeout(loadRequests,10000);return;}
+      if(requestsLoading){requestsAgain=true;return;}
+      if(document.hidden)return;
       requestsLoading=true;
-      try {
-        ownRequests=await request("/v1/visit-requests",undefined,"GET");
-        const snapshot=JSON.stringify(ownRequests);
-        if(snapshot===requestsSnapshot){updateVisitButton();return;}
-        requestsSnapshot=snapshot;
-        const focused=document.activeElement;
-        const positions=[...visitChats.values()].map(chat=>[chat,chat.list.scrollTop]);
-        for(const [id,chat] of visitChats){if(!ownRequests.some(item=>item.id===id&&item.status==="accepted")){chat.dispose();visitChats.delete(id);}}
-        ownRequestList.replaceChildren();requestsError.textContent="";
-        if (!ownRequests.length) {const empty=document.createElement("p");empty.textContent="درخواستی ثبت نشده است.";ownRequestList.append(empty);}
-        const labels={pending:"در انتظار پذیرش پزشک",accepted:"پذیرفته‌شده",cancelled:"لغوشده",expired:"مهلت درخواست تمام شده است"};
-        for (const item of ownRequests) {
-          const card=document.createElement("article");card.className="doctor-card";card.dataset.requestId=item.id;
-          const heading=document.createElement("h3");heading.textContent=item.specialty.name_fa;
-          const status=document.createElement("p");status.className="chip";status.textContent=labels[item.status];card.append(heading,status);
-          if (item.status==="pending") {
-            const cancel=document.createElement("button");cancel.type="button";cancel.textContent="لغو درخواست";cancel.disabled=visitBusy;
-            cancel.dataset.requestAction="cancel";
-            cancel.addEventListener("click",async()=>{
-              if(visitBusy)return;visitBusy=true;controls();
-              try{await request("/v1/visit-requests/"+encodeURIComponent(item.id)+"/cancel");}
-              catch{requestsError.textContent="لغو درخواست انجام نشد؛ ممکن است پزشک آن را پذیرفته باشد.";}
-              finally{visitBusy=false;await loadRequests();controls();}
-            });card.append(cancel);
-          }
-          if (item.doctor) card.append(doctorCard(item.doctor));
-          if(item.status==="accepted"){
-            if(!visitChats.has(item.id))visitChats.set(item.id,createVisitChat(item.id,"patient",item.ended));
-            const chat=visitChats.get(item.id);chat.setEnded(item.ended);card.append(chat.element);
-          }
-          if (["expired","cancelled"].includes(item.status)) {
-            const again=document.createElement("button");again.type="button";
-            again.dataset.requestAction="again";
-            again.textContent=requestSessions.has(item.id)?"درخواست دوباره":"ارزیابی تازه و درخواست دوباره";
-            again.addEventListener("click",()=>{if(requestSessions.has(item.id))requestVisit(requestSessions.get(item.id));else start();});card.append(again);
-          }
-          ownRequestList.append(card);
+      try{
+        const next=await request("/v1/chat/sessions?limit=50",undefined,"GET");
+        const before=conversations.find(item=>item.session_id===current?.session_id),after=next.find(item=>item.session_id===current?.session_id);
+        conversations=next;const snapshot=JSON.stringify(next);if(snapshot!==requestsSnapshot){requestsSnapshot=snapshot;sidebar();}
+        if(before&&after&&(before.status!==after.status||before.request_id!==after.request_id)){
+          const version=routeVersion,detail=await request("/v1/chat/sessions/"+current.session_id,undefined,"GET");
+          if(version===routeVersion)renderRequest(detail.request);
         }
-        for(const [chat,position] of positions){if(chat.element.isConnected)chat.list.scrollTop=position;}
-        for(const chat of visitChats.values())chat.resume();
-        if(focused?.isConnected&&focused.closest(".visit-chat"))focused.focus({preventScroll:true});
-        updateVisitButton();
-      } catch {requestsError.textContent="دریافت درخواست‌ها انجام نشد. دوباره تلاش می‌شود.";}
-      finally {
-        requestsLoading=false;
-        if(ownRequests.some(item=>item.status==="pending"))requestsTimer=setTimeout(loadRequests,10000);
-      }
+      }catch{requestsError.textContent="دریافت وضعیت گفتگوها انجام نشد. دوباره تلاش می‌شود.";}
+      finally{requestsLoading=false;if(requestsAgain){requestsAgain=false;requestsTimer=setTimeout(loadRequests,0);}else if(conversations.some(item=>item.status==="pending")||currentRequest?.status==="pending")requestsTimer=setTimeout(loadRequests,10000);}
     }
-    async function requestVisit(sessionId=current?.session_id) {
-      if(visitBusy||!sessionId)return;
-      visitBusy=true;requestsError.textContent="";controls();
-      try {
-        const result=await request("/v1/visit-requests",{session_id:sessionId});
-        requestSessions.set(result.id,sessionId);await loadRequests();
-        document.getElementById("my-requests").open=true;
-      } catch(error) {
-        requestsError.textContent=error.code==="no_online_doctor"?"پزشک آنلاین این تخصص در دسترس نیست. پیشنهاد را به‌روزرسانی کنید."
-          : error.code==="active_request_exists"?"برای این ارزیابی درخواست فعال دارید."
-          : "ارسال درخواست انجام نشد. وضعیت درخواست‌ها را بررسی کنید و دوباره تلاش کنید.";
-      } finally {visitBusy=false;controls();}
+    async function requestVisit() {
+      if(visitBusy||!current?.session_id)return;
+      const version=routeVersion;visitBusy=true;requestsError.textContent="";controls();
+      try{const result=await request("/v1/visit-requests",{session_id:current.session_id});if(version===routeVersion)renderRequest(result);await loadRequests();}
+      catch(error){if(version===routeVersion)requestsError.textContent=error.code==="no_online_doctor"?"پزشک آنلاین این تخصص در دسترس نیست. پیشنهاد را به‌روزرسانی کنید.":error.code==="active_request_exists"?"برای این ارزیابی درخواست فعال دارید.":"ارسال درخواست انجام نشد. وضعیت گفتگو را بررسی کنید و دوباره تلاش کنید.";await loadRequests();}
+      finally{visitBusy=false;controls();}
     }
-    visitButton.addEventListener("click",()=>requestVisit());
-    document.addEventListener("visibilitychange",()=>{if(!document.hidden)loadRequests();});
-
-    async function loadHistory() {
-      const version = ++historyVersion;
-      try {
-        const visits = await request("/v1/me/history?limit=10", undefined, "GET");
-        if (version !== historyVersion) return;
-        visitHistory.replaceChildren();
-        const previous = visits.filter(visit => visit.session_id !== current?.session_id);
-        if (!previous.length) {
-          const empty = document.createElement("p");
-          empty.textContent = "هنوز مراجعهٔ قبلی ثبت نشده است.";
-          visitHistory.append(empty);
-        }
-        for (const visit of previous) {
-          const article = document.createElement("article");
-          article.className = "history-visit";
-          const date = document.createElement("p");
-          date.textContent = new Date(visit.created_at).toLocaleString("fa-IR") + (visit.done ? " — پایان‌یافته" : " — ناتمام");
-          const symptoms = document.createElement("p");
-          symptoms.textContent = visit.collected.symptoms || "علائمی ثبت نشده است.";
-          const chips = document.createElement("div");
-          chips.className = "history-chips";
-          for (const entry of [...visit.matched.symptoms, ...visit.matched.medicines]) {
-            const chip = document.createElement("span");
-            chip.className = "chip";
-            chip.textContent = entry.name_fa;
-            chips.append(chip);
-          }
-          article.append(date, symptoms, chips);
-          visitHistory.append(article);
-        }
-      } catch {
-        if (version !== historyVersion) return;
-        visitHistory.textContent = "دریافت سابقه ممکن نشد. برای تلاش دوباره، این بخش را باز کنید.";
-      }
-    }
+    visitButton.addEventListener("click",requestVisit);
+    document.addEventListener("visibilitychange",()=>{if(document.hidden)clearTimeout(requestsTimer);else loadRequests();});
     function renderSelectionList() {
       medicineItems.replaceChildren();
       draftSelections.forEach((name, index) => {
@@ -667,12 +364,13 @@ function createVisitChat(requestId, role, initiallyEnded) {
       return true;
     }
     function bubble(text, role) {
+      const follow=thread.scrollHeight-thread.scrollTop-thread.clientHeight<64||role==="user";
       const node = document.createElement("p");
       node.className = "bubble " + role;
       node.dir = "auto";
       node.textContent = text;
       messages.append(node);
-      messages.scrollTop = messages.scrollHeight;
+      if (follow) thread.scrollTop = thread.scrollHeight;
     }
     function displayValue(name, value) {
       if (value === null || value === undefined) return "ثبت نشده";
@@ -852,7 +550,7 @@ function createVisitChat(requestId, role, initiallyEnded) {
       if (!response.ok) {
         if(response.status===401)location.replace("/login");
         if(response.status===403)location.replace("/doctor");
-        const error = new Error("درخواست ناموفق بود (کد " + response.status.toLocaleString("fa-IR") + "). برای ادامه «شروع دوباره» را بزنید.");
+        const error = new Error("درخواست ناموفق بود (کد " + response.status.toLocaleString("fa-IR") + "). برای ادامه «گفت‌وگوی جدید» را بزنید.");
         error.status = response.status;
         try {error.code=(await response.json()).error?.code;} catch {}
         throw error;
@@ -863,39 +561,34 @@ function createVisitChat(requestId, role, initiallyEnded) {
     function fail(error) {
       blocked = true;
       errorLine.textContent = error.message.startsWith("درخواست ناموفق بود (کد ")
-        ? error.message : "درخواست ناموفق بود. اتصال را بررسی کنید و سپس «شروع دوباره» را بزنید.";
+        ? error.message : "درخواست ناموفق بود. اتصال را بررسی کنید و سپس «گفت‌وگوی جدید» را بزنید.";
       statusLine.textContent = "خطا در ارتباط";
     }
-    async function start() {
-      if (busy) return;
-      busy = true;
-      controls();
-      errorLine.textContent = "";
-      clearTriage();
+    async function openConversation(id) {
+      const version=++routeVersion;liveChat?.dispose();liveChat=null;busy=true;controls();
+      blocked=false;errorLine.textContent=requestsError.textContent="";currentRequest=null;messages.replaceChildren();liveLog.replaceChildren();endingLine.replaceChildren();endingLine.hidden=true;ownRequestList.replaceChildren();ownRequestList.hidden=true;
+      confirmationCard=null;editingField=null;reviewEditing=false;draftSelections=[];input.value=contextInput.value="";clearTriage();
       try {
-        // ponytail: each dropdown is capped at 100 entries; add search when vocabulary grows beyond this.
-        for (const [kind, step] of [["symptoms", "symptoms"], ["medicines", "medications"]]) {
-          const dictionary = await request("/v1/dictionaries/" + kind + "?limit=100", undefined, "GET");
-          answerChoices[step] = [noMedicine, ...dictionary.entries.map(entry => entry.name_fa), customAnswer];
-        }
-        const state = await request("/v1/chat/sessions");
-        blocked = false;
-        messages.replaceChildren();
-        confirmationCard = null;
-        editingField = null;
-        reviewEditing = false;
-        draftSelections = [];
-        input.value = "";
-        contextInput.value = "";
-        render(state);
-        bubble(state.reply, "bot");
-        await loadHistory();
-      } catch (error) { fail(error); }
-      finally { busy = false; controls(); if (!input.disabled) input.focus(); }
+        const detail=await request("/v1/chat/sessions/"+encodeURIComponent(id),undefined,"GET");if(version!==routeVersion)return;
+        for(const message of detail.transcript)bubble(message.content,message.role==="user"?"user":"bot");
+        render(detail.session);if(!detail.transcript.length)bubble(detail.session.reply,"bot");
+        if(detail.triage)renderTriage(detail.triage);
+        else if(detail.session.done&&!detail.session.emergency){triagePanel.hidden=false;triageStatus.textContent="پیشنهادی ذخیره نشده است. برای دریافت پیشنهاد تلاش کنید.";triageRetry.hidden=false;}
+        renderRequest(detail.request);thread.scrollTop=thread.scrollHeight;
+      }catch(error){if(version!==routeVersion)return;if(error.status===404){await loadRequests();Shell.navigate(conversations[0]?"#/c/"+conversations[0].session_id:"#/new",true);}else fail(error);}
+      finally{if(version===routeVersion){busy=false;controls();}}
+    }
+    async function start() {
+      if(busy||visitBusy){Shell.navigate(current?"#/c/"+current.session_id:conversations[0]?"#/c/"+conversations[0].session_id:"#/new",true);return;}
+      if(current&&!current.done&&!confirm("این پذیرش هنوز کامل نشده است. گفت‌وگوی ناتمام در فهرست باقی می‌ماند. گفت‌وگوی جدید شروع شود؟")){Shell.navigate("#/c/"+current.session_id,true);return;}
+      const version=++routeVersion;liveChat?.dispose();liveChat=null;busy=true;controls();
+      try{const state=await request("/v1/chat/sessions");await loadRequests();if(version===routeVersion)Shell.navigate("#/c/"+state.session_id,true);}
+      catch(error){if(version===routeVersion)fail(error);}
+      finally{if(location.hash==="#/new"){busy=false;controls();}}
     }
     async function submitAnswer(text) {
       if (busy || visitBusy || blocked || !current || current.done) return;
-      const edited = editingField;
+      const edited = editingField,version=routeVersion;
       busy = true;
       controls();
       errorLine.textContent = "";
@@ -905,6 +598,7 @@ function createVisitChat(requestId, role, initiallyEnded) {
         const body = {message: text};
         if (edited) body.edit_field = edited;
         const state = await request("/v1/chat/sessions/" + current.session_id + "/messages", body);
+        if(version!==routeVersion)return;
         bubble(edited ? fieldLabels[edited] + " اصلاح شد." : text === "رد کردن" ? "توضیحی اضافه نشد." : text, "user");
         input.value = "";
         contextInput.value = "";
@@ -917,7 +611,9 @@ function createVisitChat(requestId, role, initiallyEnded) {
         if (state.step !== "confirm" || state.done) bubble(state.reply, "bot");
         if (confirmationCard && !state.done) confirmationCard.querySelector("h3").focus();
         if (state.done && !state.emergency) await loadTriage(state);
+        await loadRequests();
       } catch (error) {
+        if(version!==routeVersion)return;
         if (current.step === "confirm") {
           const message = error.status === 422 ? "پاسخ معتبر نیست. مقدار را بررسی کنید و دوباره ذخیره کنید." : error.status === 409 ? "این بخش دیگر قابل ویرایش نیست. برای ادامه، پذیرش تازه‌ای شروع کنید." : "ثبت انجام نشد. اتصال را بررسی کنید و دوباره تلاش کنید؛ اطلاعات واردشده حفظ شده است.";
           errorLine.textContent = message;
@@ -926,6 +622,7 @@ function createVisitChat(requestId, role, initiallyEnded) {
           if (error.status === 422) (edited === "additional_context" ? contextInput : input).setAttribute("aria-invalid", "true");
         } else fail(error);
       } finally {
+        if(version!==routeVersion)return;
         busy = false;
         controls();
         if (!contextInput.disabled) contextInput.focus();
@@ -978,8 +675,7 @@ function createVisitChat(requestId, role, initiallyEnded) {
         input.focus();
       }
     });
-    reset.addEventListener("click", start);
-    historyPanel.addEventListener("toggle", () => { if (historyPanel.open) loadHistory(); });
+    reset.addEventListener("click",()=>{if(location.hash==="#/new")start();else Shell.navigate("#/new");});
     logout.addEventListener("click", async () => {
       if (busy || visitBusy) return;
       busy=true;controls();
@@ -988,7 +684,7 @@ function createVisitChat(requestId, role, initiallyEnded) {
       finally {busy=false;controls();}
     });
     deleteAccount.addEventListener("click", async () => {
-      if (busy || visitBusy) return;
+      if (busy || visitBusy || !confirm("حساب، اطلاعات و همهٔ گفتگوهای شما پاک شود؟ این کار قابل بازگشت نیست.")) return;
       busy=true;controls();
       try {await request("/v1/me",undefined,"DELETE");location.replace("/login");}
       catch {errorLine.textContent="حذف حساب انجام نشد. دوباره تلاش کنید.";}
@@ -998,10 +694,13 @@ function createVisitChat(requestId, role, initiallyEnded) {
       try {
         const result=await request("/v1/auth/me",undefined,"GET");
         if (result.user.role!=="patient") {location.replace(result.user.role==="admin"?"/admin":"/doctor");return;}
-        await start();await loadRequests();
+        document.getElementById("display-name").textContent=result.user.display_name;
+        // ponytail: each dropdown is capped at 100 entries; add search when vocabulary grows beyond this.
+        for(const [kind,step] of [["symptoms","symptoms"],["medicines","medications"]]){const data=await request("/v1/dictionaries/"+kind+"?limit=100",undefined,"GET");answerChoices[step]=[noMedicine,...data.entries.map(entry=>entry.name_fa),customAnswer];}
+        conversations=await request("/v1/chat/sessions?limit=50",undefined,"GET");
+        Shell.init({title:"پذیرش بیمار",items:[],isRoute:hash=>/^#\/c\/[a-f0-9]{32}$/.test(hash)||hash==="#/new",defaultRoute:()=>conversations[0]?"#/c/"+conversations[0].session_id:"#/new",onRoute:hash=>{if(hash==="#/new")start();else openConversation(hash.slice(4));}});
+        sidebar();if(conversations.some(item=>item.status==="pending"))requestsTimer=setTimeout(loadRequests,10000);
       } catch(error) {fail(error);}
     })();
 
-  </script>
-</body>
-</html>
+</script></body></html>

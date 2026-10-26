@@ -11,7 +11,9 @@ from contextlib import closing
 
 from app.core.db import connect
 from app.main import app
-from helpers import as_patient, intake_answers, patient_of, register_patient
+from helpers import admin_account, as_patient, intake_answers, patient_of, register_doctor, register_patient
+from app.agent import sessions, triage
+from app.core import db, llm
 from app.schemas.common import ErrorResponse
 
 
@@ -125,7 +127,7 @@ class ChatApiTests(unittest.TestCase):
         self.message(first, "30")
         self.assertIsNone(self.stored_session(second)["age"])
 
-    def test_demo_is_self_contained_html(self):
+    def test_demo_uses_shared_local_assets(self):
         response = self.client.get("/demo")
         self.assertEqual(response.status_code, 200)
         self.assertIn("text/html", response.headers["content-type"])
@@ -133,7 +135,171 @@ class ChatApiTests(unittest.TestCase):
         self.assertIn('lang="fa" dir="rtl"', response.text)
         self.assertIn("textContent", response.text)
         self.assertNotIn("innerHTML", response.text)
-        self.assertNotIn("<script src=", response.text)
+        self.assertIn('<script src="/assets/shell.js">', response.text)
+        self.assertIn('href="/assets/shell.css"', response.text)
+
+    def test_shell_assets_allowlist_cache_markup_and_safe_rendering(self):
+        for name, mime in (("shell.css", "text/css"), ("shell.js", "text/javascript")):
+            response = self.client.get("/assets/" + name)
+            self.assertEqual(response.status_code, 200)
+            self.assertTrue(response.headers["content-type"].startswith(mime))
+            self.assertEqual(response.headers["cache-control"], "no-cache")
+        for path in ("/assets/unknown.js", "/assets/index.html", "/assets/%2e%2e%2findex.html", "/assets/..%5cindex.html", "/assets/data/doctors.json"):
+            response = self.client.get(path)
+            self.assertEqual(response.status_code, 404, path)
+            ErrorResponse.model_validate(response.json())
+        for path in ("/demo", "/doctor", "/admin"):
+            response = self.client.get(path)
+            self.assertEqual(response.status_code, 200)
+            self.assertTrue(response.headers["content-type"].startswith("text/html"))
+            for marker in ('href="/assets/shell.css"', '<script src="/assets/shell.js">', 'id="menu-toggle"', 'aria-expanded="false"', 'aria-controls="shell-sidebar"', '<nav id="shell-nav" aria-label='):
+                self.assertIn(marker, response.text)
+        static = Path(__file__).parents[1] / "src/app/static"
+        for path in [*static.glob("*.html"), *static.glob("*.js")]:
+            for forbidden in ("innerHTML", "outerHTML", "insertAdjacentHTML", "document.write", "eval("):
+                self.assertNotIn(forbidden, path.read_text(encoding="utf-8"), str(path))
+        self.assertNotIn("/v1/me/history", (static / "index.html").read_text(encoding="utf-8"))
+
+    def test_conversation_list_states_order_summaries_and_read_only(self):
+        expected = {}
+        for index, status in enumerate(("intake", "triage", "pending", "expired", "accepted", "ended", "cancelled", "expired", "emergency")):
+            state = self.create()
+            session_id = state["session_id"]
+            expected[session_id] = status
+            with closing(connect()) as connection, connection:
+                connection.execute("UPDATE sessions SET created_at=?,done=?,emergency=?,chief_complaint=?,symptoms=? WHERE id=?", (
+                    f"2040-01-{index+1:02}T00:00:00+00:00", status != "intake", status == "emergency",
+                    "x" * 90 if index == 0 else None, "synthetic symptoms" if index else None, session_id))
+                if index == 1:
+                    connection.execute("""INSERT INTO triage_results(session_id,specialty_code,urgency,source,doctor_summary_fa,considerations_fa,created_at)
+                        VALUES (?,'general_practice','unknown','fallback','','[]','2040-01-01')""", (session_id,))
+                if index >= 2:
+                    stored_status = "pending" if index == 3 else "accepted" if status == "ended" else "cancelled" if status == "emergency" else status
+                    connection.execute("""INSERT INTO visit_requests(id,patient_id,session_id,specialty_code,status,created_at,updated_at,ended_at,doctor_id)
+                        VALUES (?,?,?,'general_practice',?,?,?,?,?)""", (f"request-{index}", self.user["patient_id"], session_id, stored_status,
+                        "2000-01-01" if index == 3 else "2040-01-01", "2040-01-01", "2040-01-02" if status == "ended" else None,
+                        "demo_doctor_1" if stored_status == "accepted" else None))
+        with closing(connect()) as connection:
+            before = list(connection.iterdump())
+        response = self.client.get("/v1/chat/sessions")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["cache-control"], "no-store")
+        items = response.json()
+        self.assertEqual([item["session_id"] for item in items], list(reversed(expected)))
+        self.assertEqual({item["session_id"]: item["status"] for item in items}, expected)
+        self.assertEqual(items[-1]["summary"], "x" * 80)
+        self.assertEqual(items[0]["summary"], "synthetic symptoms")
+        self.assertEqual(items[0]["request_id"], "request-8")
+        self.assertEqual(items[0]["specialty"]["code"], "general_practice")
+        self.assertIsNone(items[-1]["specialty"])
+        for item in items:
+            self.assertEqual(set(item), {"session_id", "created_at", "summary", "step", "done", "emergency", "status", "specialty", "request_id"})
+        with closing(connect()) as connection:
+            self.assertEqual(list(connection.iterdump()), before)
+            self.assertEqual(connection.execute("SELECT status FROM visit_requests WHERE id='request-3'").fetchone()[0], "pending")
+        self.assertEqual(len(self.client.get("/v1/chat/sessions?limit=2").json()), 2)
+        for limit in (0, 51, "invalid"):
+            invalid = self.client.get(f"/v1/chat/sessions?limit={limit}")
+            self.assertEqual(invalid.status_code, 422)
+            ErrorResponse.model_validate(invalid.json())
+
+    def test_conversation_list_is_one_query_and_uses_stored_specialty_first(self):
+        state = self.create()
+        self.assertIsNone(self.client.get("/v1/chat/sessions").json()[0]["summary"])
+        with closing(connect()) as connection, connection:
+            connection.execute("INSERT INTO triage_results(session_id,specialty_code,urgency,source,doctor_summary_fa,considerations_fa,created_at) VALUES (?,'general_practice','unknown','fallback','','[]','2040-01-01')", (state["session_id"],))
+            connection.execute("INSERT INTO visit_requests(id,patient_id,session_id,specialty_code,status,created_at,updated_at) VALUES ('old',?,?,'dermatology','cancelled','2040-01-01','2040-01-01')", (self.user["patient_id"], state["session_id"]))
+            connection.execute("INSERT INTO visit_requests(id,patient_id,session_id,specialty_code,status,created_at,updated_at) VALUES ('new',?,?,'dermatology','expired','2040-01-01','2040-01-01')", (self.user["patient_id"], state["session_id"]))
+        statements = []
+        original = db.connect
+        def traced():
+            connection = original()
+            connection.set_trace_callback(statements.append)
+            return connection
+        with patch.object(db, "connect", side_effect=traced):
+            items = sessions.list_sessions(self.user["patient_id"])
+        self.assertEqual(len([sql for sql in statements if sql.lstrip().upper().startswith("SELECT")]), 1)
+        self.assertEqual(items[0]["specialty"]["code"], "general_practice")
+        self.assertEqual(items[0]["request_id"], "new")
+        self.assertEqual(items[0]["status"], "expired")
+
+    def test_conversation_reads_are_owned_and_patient_only(self):
+        state = self.create()
+        detail_path = "/v1/chat/sessions/" + state["session_id"]
+        other = register_patient(self.client)
+        self.assertNotEqual(other["patient_id"], self.user["patient_id"])
+        self.assertEqual(self.client.get("/v1/chat/sessions").json(), [])
+        for path in (detail_path, "/v1/chat/sessions/unknown"):
+            response = self.client.get(path)
+            self.assertEqual(response.status_code, 404)
+            ErrorResponse.model_validate(response.json())
+        doctor = self.enterContext(TestClient(app))
+        register_doctor(doctor)
+        admin = self.enterContext(TestClient(app))
+        with admin_account(admin):
+            for client in (doctor, admin):
+                for path in ("/v1/chat/sessions", detail_path):
+                    self.assertEqual(client.get(path).status_code, 403)
+
+    def test_conversation_detail_state_stored_triage_latest_request_and_privacy(self):
+        state = self.create()
+        path = "/v1/chat/sessions/" + state["session_id"]
+        detail = self.client.get(path).json()
+        self.assertEqual(detail["session"], state)
+        self.assertIsNone(detail["triage"])
+        self.assertIsNone(detail["request"])
+        self.assertEqual(detail["transcript"][0]["content"], state["reply"])
+        for answer in intake_answers():
+            state = self.message(state["session_id"], answer).json()
+        for source in ("llm", "fallback"):
+            with closing(connect()) as connection, connection:
+                connection.execute("DELETE FROM triage_results")
+                connection.execute("INSERT INTO triage_results(session_id,specialty_code,urgency,source,doctor_summary_fa,considerations_fa,created_at) VALUES (?,'general_practice','routine',?,'private doctor summary','[\"private consideration\"]','2040-01-01')", (state["session_id"], source))
+            with patch.dict(os.environ, {"APP_LLM_BASE_URL": "http://provider.invalid/v1", "APP_LLM_MODEL": "synthetic-model"}), \
+                    patch.object(triage, "run_triage", side_effect=AssertionError("must only read stored triage")) as run, \
+                    patch.object(llm, "chat_completion", side_effect=AssertionError("must not call provider")) as provider:
+                response = self.client.get(path)
+            run.assert_not_called()
+            provider.assert_not_called()
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.headers["cache-control"], "no-store")
+            self.assertEqual(response.json()["session"], state)
+            self.assertEqual(response.json()["triage"]["source"], source)
+            for marker in ("doctor_summary", "considerations", "private doctor", "private consideration", "patient_id", "username"):
+                self.assertNotIn(marker, response.text)
+        with closing(connect()) as connection, connection:
+            for index, status in enumerate(("cancelled", "expired")):
+                connection.execute("INSERT INTO visit_requests(id,patient_id,session_id,specialty_code,status,created_at,updated_at) VALUES (?,?,?,'general_practice',?,'2040-01-01','2040-01-01')", (str(index), self.user["patient_id"], state["session_id"], status))
+            before = list(connection.iterdump())
+        detail = self.client.get(path).json()
+        self.assertEqual(detail["request"]["id"], "1")
+        self.assertEqual(detail["request"]["session_id"], state["session_id"])
+        self.assertIsNone(detail["request"]["accepted_at"])
+        self.assertIsNone(detail["request"]["ended_at"])
+        with closing(connect()) as connection:
+            self.assertEqual(list(connection.iterdump()), before)
+            expected = [dict(row) for row in connection.execute("SELECT role,content,created_at FROM messages WHERE session_id=? ORDER BY id", (state["session_id"],))]
+        self.assertEqual(detail["transcript"], expected)
+
+    def test_conversation_transcript_cap_order_and_emergency_redaction(self):
+        state = self.create()
+        path = "/v1/chat/sessions/" + state["session_id"]
+        marker = "private original chest pain"
+        self.message(state["session_id"], "30")
+        self.message(state["session_id"], "170")
+        self.message(state["session_id"], "70")
+        self.message(state["session_id"], marker)
+        response = self.client.get(path)
+        self.assertNotIn(marker, response.text)
+        self.assertTrue(response.json()["session"]["emergency"])
+        self.assertIn(sessions.REDACTED_MESSAGE, [item["content"] for item in response.json()["transcript"]])
+        with closing(connect()) as connection, connection:
+            for index in range(205):
+                db.add_message(connection, state["session_id"], "user", f"synthetic-{index}", "2040-01-01")
+            expected = [dict(row) for row in connection.execute("SELECT role,content,created_at FROM messages WHERE session_id=? ORDER BY id LIMIT 200", (state["session_id"],))]
+        detail = self.client.get(path).json()
+        self.assertEqual(len(detail["transcript"]), 200)
+        self.assertEqual(detail["transcript"], expected)
 
 
     def test_full_persian_flow(self):

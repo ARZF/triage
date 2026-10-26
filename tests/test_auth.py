@@ -234,7 +234,11 @@ class AuthTests(unittest.TestCase):
             self.assertIn("text/html", response.headers["content-type"])
             self.assertIn('lang="fa" dir="rtl"', response.text)
             self.assertNotIn("innerHTML", response.text)
-            self.assertNotIn("<script src=", response.text)
+            if path == "/login":
+                self.assertNotIn("<script src=", response.text)
+            else:
+                self.assertIn('<script src="/assets/shell.js">', response.text)
+                self.assertIn('href="/assets/shell.css"', response.text)
         response = self.client.get("/v1/specialties")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.headers["cache-control"], "no-store")

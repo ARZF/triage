@@ -11,6 +11,12 @@ move them into a dated version section when a release is made.
 
 ### Added
 
+- Slice 7a: read-only owned conversation list/detail endpoints, stored intake
+  transcripts and triage, latest visit projections and lifecycle timestamps.
+- Explicit no-cache shared CSS/JS asset routes and packaged dashboard assets.
+- Shared Persian RTL sidebar with hash navigation, desktop preference, accessible
+  mobile drawer and role-specific navigation for patient, doctor and admin.
+
 - Document local admin credentials in the ignored .env and an optional uv
   --env-file launch command using the existing virtual environment.
 
@@ -88,6 +94,13 @@ move them into a dated version section when a release is made.
 - Doctors now come from schema-v3 SQLite rows; doctors.json is seed data without online fields, online presence is computed and scores may be null. Reset the old disposable synthetic database once.
 
 ### Changed
+
+- Patient loads resume the latest conversation; intake/review, triage, visit
+  status and doctor messages now share one thread and bottom composer.
+- Doctor acceptance opens a patient thread; accepted visits are listed in the
+  sidebar, active first. Admin status/audit tabs move into the same shell.
+- Shared direct-chat client retains cursor polling, draft preservation and ended
+  history while stopping polling when navigating away from a conversation.
 
 - Label the doctor registration identifier «شماره نظام پزشکی» consistently in
   signup/admin UI, keeping synthetic-only notices and the license_number contract.

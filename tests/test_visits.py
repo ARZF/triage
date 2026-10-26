@@ -77,7 +77,7 @@ class VisitTests(unittest.TestCase):
             self.assertIsNone(item["previous_visits"])
             self.assertIsNone(item["ai"])
             self.assertEqual(item["preview"], {"age": 30, "symptoms": "cough", "duration": "two days", "severity": 3})
-            self.assertEqual(set(item), {"id","status","created_at","specialty","urgency","preview","patient","previous_visits","ai","ended"})
+            self.assertEqual(set(item), {"id","status","created_at","specialty","urgency","preview","patient","previous_visits","ai","ended","accepted_at","ended_at"})
             self.assertNotIn("doctor_note_marker", json.dumps(item))
         barrier = Barrier(2)
         def accept(index):
@@ -114,6 +114,28 @@ class VisitTests(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["doctor_id"], self.doctor_rows[winner]["id"])
         self.assertIsNotNone(rows[0]["accepted_at"])
+
+    def test_visit_session_and_lifecycle_timestamps(self):
+        state = self.complete()
+        pending = self.create_request(state)
+        self.assertEqual(pending["session_id"], state["session_id"])
+        self.assertIsNone(pending["accepted_at"])
+        self.assertIsNone(pending["ended_at"])
+        queue = self.doctor_clients[0].get("/v1/doctor/requests").json()[0]
+        self.assertIsNone(queue["accepted_at"])
+        self.assertIsNone(queue["ended_at"])
+        accepted = self.doctor_clients[0].post(f"/v1/doctor/requests/{pending['id']}/accept").json()
+        self.assertEqual(accepted["accepted_at"], BASE)
+        self.assertIsNone(accepted["ended_at"])
+        patient = self.patient.get("/v1/visit-requests").json()[0]
+        self.assertEqual(patient["accepted_at"], BASE)
+        self.clock.return_value = "2030-01-01T00:01:00.000000+00:00"
+        self.assertEqual(self.doctor_clients[0].post(f"/v1/visit-requests/{pending['id']}/end").status_code, 200)
+        for client, path in ((self.patient, "/v1/visit-requests"), (self.doctor_clients[0], "/v1/doctor/requests")):
+            ended = client.get(path).json()[0]
+            self.assertEqual(ended["accepted_at"], BASE)
+            self.assertEqual(ended["ended_at"], self.clock.return_value)
+            self.assertTrue(ended["ended"])
 
     def test_every_visit_creation_guard_and_partial_unique_index(self):
         response = self.patient.post("/v1/visit-requests", json={"session_id": "unknown"})

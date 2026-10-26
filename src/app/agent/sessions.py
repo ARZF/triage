@@ -8,8 +8,34 @@ from app.core import db
 from app.core.errors import ServiceError
 from app.agent import dictionaries
 from app.agent.intake import PROFILE_FIELDS, QUESTIONS, Collected, IntakeState, advance, profile_state
+from app.services import doctors, visits
 
 REDACTED_MESSAGE = "متن این پیام به‌دلیل توقف اضطراری ذخیره نشده است."
+
+
+def list_sessions(patient_id: str, limit: int = 20) -> list[dict]:
+    cutoff = visits._cutoff(db.utc_now())
+    with closing(db.connect()) as connection:
+        rows = connection.execute(
+            """SELECT s.id AS session_id,s.created_at,s.chief_complaint,s.symptoms,s.step,s.done,s.emergency,
+                t.specialty_code AS triage_specialty,r.specialty_code AS request_specialty,
+                r.id AS request_id,r.status,r.created_at AS request_created_at,r.ended_at
+               FROM sessions s LEFT JOIN triage_results t ON t.session_id=s.id
+               LEFT JOIN visit_requests r ON r.rowid=(SELECT latest.rowid FROM visit_requests latest
+                   WHERE latest.session_id=s.id ORDER BY latest.created_at DESC,latest.rowid DESC LIMIT 1)
+               WHERE s.patient_id=? ORDER BY s.created_at DESC,s.rowid DESC LIMIT ?""", (patient_id, limit),
+        ).fetchall()
+    items = []
+    for row in rows:
+        status = visits.request_status({"status": row["status"], "created_at": row["request_created_at"]}, cutoff) if row["request_id"] else None
+        status = "emergency" if row["emergency"] else "ended" if status == "accepted" and row["ended_at"] else status or ("triage" if row["done"] else "intake")
+        code = row["triage_specialty"] or row["request_specialty"]
+        summary = row["chief_complaint"] or row["symptoms"]
+        items.append({"session_id": row["session_id"], "created_at": row["created_at"],
+                      "summary": summary[:80] if summary else None, "step": row["step"], "done": bool(row["done"]),
+                      "emergency": bool(row["emergency"]), "status": status,
+                      "specialty": doctors.specialty(code) if code else None, "request_id": row["request_id"]})
+    return items
 
 
 def restore(row: sqlite3.Row) -> IntakeState:

@@ -26,10 +26,15 @@ def expire_requests() -> None:
         )
 
 
-def _patient_item(connection, row) -> dict:
+def request_status(row, cutoff: str) -> str:
+    return "expired" if row["status"] == "pending" and row["created_at"] < cutoff else row["status"]
+
+
+def _patient_item(connection, row, cutoff: str | None = None) -> dict:
     doctor = connection.execute("SELECT * FROM doctors WHERE id=?", (row["doctor_id"],)).fetchone() if row["doctor_id"] else None
     return {
-        "id": row["id"], "status": row["status"], "created_at": row["created_at"],
+        "id": row["id"], "status": request_status(row, cutoff or _cutoff(db.utc_now())), "created_at": row["created_at"],
+        "session_id": row["session_id"], "accepted_at": row["accepted_at"], "ended_at": row["ended_at"],
         "specialty": doctors.specialty(row["specialty_code"]),
         "doctor": doctors.public_doctor(doctor) if doctor else None,
         "ended": row["ended_at"] is not None,
@@ -74,9 +79,7 @@ def patient_requests(patient_id: str) -> list[dict]:
         rows = connection.execute(
             "SELECT * FROM visit_requests WHERE patient_id=? ORDER BY created_at DESC, rowid DESC", (patient_id,)
         ).fetchall()
-        return [{**_patient_item(connection, row),
-                 "status": "expired" if row["status"] == "pending" and row["created_at"] < cutoff else row["status"]}
-                for row in rows]
+        return [_patient_item(connection, row, cutoff) for row in rows]
 
 
 def cancel(patient_id: str, request_id: str) -> dict:
@@ -101,6 +104,7 @@ def _doctor_item(connection, row, doctor_id: str) -> dict:
     context = build_context(connection, row["session_id"], for_doctor=True) if accepted else None
     return {
         "id": row["id"], "status": row["status"], "created_at": row["created_at"],
+        "accepted_at": row["accepted_at"], "ended_at": row["ended_at"],
         "specialty": doctors.specialty(row["specialty_code"]),
         "ended": row["ended_at"] is not None,
         "urgency": triage["urgency"] if triage else "unknown",

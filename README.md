@@ -85,7 +85,7 @@ dependencies. Settings still read only os.environ. Restart with this command
 after changing `.env`; startup refreshes the configured admin password hash.
 
 Log in as admin in a separate private browser session and open /admin. The panel
-shows a pending count, status tabs, synthetic doctor metadata and review audit;
+shows a pending count, status navigation, synthetic doctor metadata and review audit;
 it never exposes usernames, password data, patient records, triage or chat.
 Visible admin pages refresh every 15 seconds. Approve pending registrations;
 Reject requires a 3–300-character stripped reason. Approved doctors may be
@@ -104,8 +104,8 @@ private browser sessions, approve them in /admin, and leave their dashboards ope
 in another browser session, complete an intake, let triage finish, and press
 the broadcast visit-request button. Both online doctors see the preview.
 The first doctor to accept wins; the other queue clears on its next poll,
-and the patient sees the accepting doctor's card. Open the chat panel on both
-accepted-visit cards to exchange synthetic messages.
+and the patient sees the accepting doctor's card in the same conversation.
+Acceptance opens the doctor's patient thread; exchange synthetic messages there.
 
 The doctor dashboard polls every ten seconds while visible. Polling updates
 its presence heartbeat. Online means verified, available, and seen in the
@@ -156,8 +156,11 @@ A fixed Persian/English red-flag list can stop complaint or symptoms collection 
 the fixed emergency notice without saving the triggering text. This starter
 list is not clinically reviewed and is not a clinical assessment.
 
-Reset starts another visit for the same logged-in patient. History uses
-/v1/me/history. There is no localStorage patient handle. Logout revokes the
+«گفت‌وگوی جدید» starts another intake for the same logged-in patient; an unfinished
+intake remains in the sidebar after confirmation. Page load resumes the latest
+conversation rather than creating a new session. The history API remains available,
+but the UI uses the conversation list/detail endpoints. There is no localStorage
+patient handle. Logout revokes the
 current cookie session; delete-account removes the patient, user, all auth
 sessions, intakes, messages, triage results and requests and clears the cookie.
 
@@ -189,11 +192,9 @@ Request statuses are pending, accepted, cancelled and expired. Patients may
 cancel pending requests only. Pending requests expire after the configured TTL.
 Create, cancel, accept and doctor-list operations sweep expired pending rows.
 The patient list projects expired status without changing stored rows. Cancelled or
-expired requests allow another request. The patient panel polls every ten
-seconds while a request is pending and the tab is visible. An expired request
-can be retried for the current page's remembered intake; after reloading, the
-page offers a fresh intake because the request-list API does not expose
-session ids. Accepted requests show the accepting doctor's card.
+expired requests allow another request for the same intake, including after reload.
+The patient conversation list polls every ten seconds while anything is pending
+and the tab is visible. Accepted requests show the accepting doctor's card.
 
 GET /v1/doctor/requests intentionally updates last_seen_at and sweeps expiry.
 Patient request lists and visit-message reads are read-only.
@@ -205,15 +206,15 @@ Only the owning patient and the verified doctor who accepted the request can
 read or post. Other accounts and non-accepted requests receive 404. The chat
 does not call an LLM or add conversation text to provider context.
 
-Each accepted card has a Persian RTL chat panel with distinct message bubbles,
+Each accepted conversation continues in one Persian RTL thread with distinct message bubbles,
 a multiline input and a 2000-character counter. Enter sends; Shift+Enter adds a
 newline. Messages are stripped and must contain 1–2000 characters afterwards.
 There is a 500-message limit per visit. Empty, over-limit and pending sends are
-disabled. The emergency-services banner stays above the message history.
+disabled. The emergency-services banner stays above the composer.
 
-Open panels poll every three seconds while the tab is visible, using the last
-message id and fetching further pages when needed. Closed/hidden panels pause;
-reopening or returning to the tab fetches immediately. Consecutive read failures
+Only the open conversation polls every three seconds while the tab is visible,
+using the last message id and fetching further pages when needed. Navigation and
+hidden tabs pause polling; reopening or returning fetches immediately. Consecutive read failures
 back off to ten seconds; success restores three seconds. Reads retry automatically.
 An uncertain send preserves its draft and asks the user to check history before
 resending; automatic POST retries require future idempotency support. Refreshes
@@ -226,10 +227,38 @@ and status remains accepted with ended=true. Ending does not reopen the intake
 for another request. Posting after ending returns 409 visit_ended; reaching the
 message ceiling returns 409 chat_full.
 
+## Shared dashboards and conversation navigation
+
+The patient, doctor and admin pages share a top bar and toggleable RTL sidebar;
+login remains self-contained. At 900px and above the sidebar starts open and
+remembers its collapsed state when storage is available. Below 900px it starts
+closed on each load, uses a backdrop, traps keyboard focus, closes with Escape
+or a link, returns focus to the toggle and locks background scrolling. Motion
+respects the reduced-motion preference. Hash routes support browser back/forward.
+
+Patient routes are #/new and #/c/<session_id>. The sidebar lists up to 50 recent
+conversations with date, short complaint and status, plus confirmed account
+deletion. The thread order is collected-data disclosure, intake/review, one
+triage card, request status, accepting doctor, direct messages, then ended notice.
+One bottom composer follows the current stage; pending/triage and ended/full
+states prevent sending. Opening a saved conversation displays stored triage,
+including fallback, without a provider call; «تلاش دوباره» explicitly refreshes it.
+
+Doctor routes are #/queue and #/patient/<request_id>. The queue badge and accepted
+visits (active first, ended last) live in the sidebar with availability. The
+patient thread starts with «گزارش سامانهٔ پذیرش», structured intake, previous
+visits and the doctor-only AI warning. Admin routes are #/pending, #/approved,
+#/rejected, #/suspended and #/audit, retaining review notes and paging.
+
+Unread counts, push, per-conversation deletion/search, unfinished-session cleanup
+or caps, profile editing and password features are not implemented.
+
 ## API
 
 Public:
 - GET /health, /docs, /demo, /login, /doctor, /admin (pages enforce role redirects).
+- GET /assets/shell.css and /assets/shell.js: explicit local assets, no-cache;
+  other asset names and traversal return 404. No directory is mounted.
 - GET /v1/dictionaries/{kind}?q=&limit= (symptoms or medicines, q <=100, limit 1-100).
 - GET /v1/specialties -> [{code, name_fa}].
 - POST /v1/auth/register -> 201; POST /v1/auth/login -> 200.
@@ -242,6 +271,17 @@ Any logged-in role:
 
 Patient role:
 - POST /v1/chat/sessions has no body and returns 201.
+- GET /v1/chat/sessions?limit=20 (1–50): newest-first conversation summaries
+  {session_id, created_at, summary, step, done, emergency, status, specialty,
+  request_id}. Summary is the first 80 complaint characters, else symptoms,
+  else null. One joined query; no writes. Status is emergency first, then the
+  latest request (accepted becomes ended when ended_at is set; overdue pending
+  projects expired), else triage when done, otherwise intake. Specialty uses
+  stored triage before the latest request.
+- GET /v1/chat/sessions/{session_id}: {session: ChatResponse, transcript:
+  [{role, content, created_at}] in order, max 200, triage: patient TriageResponse
+  or null, request: latest PatientVisit or null}. Read-only, stored triage only,
+  no provider calls or doctor-only fields; unknown/other-patient sessions are 404.
 - POST /v1/chat/sessions/{session_id}/messages accepts {message: str}, length 1-2000.
   Optional edit_field names one collected field and is allowed only at unfinished
   final review. Invalid field/answer is 422; wrong stage/completed is 409. A valid
@@ -267,7 +307,8 @@ Accepted patient or accepting verified doctor:
 - POST /v1/visit-requests/{id}/end -> 200 {ended: true}; accepting verified
   doctor only. Patients/unverified doctors receive 403; other doctors 404.
 
-PatientVisit and DoctorVisit items include ended: bool. Visit-message responses
+PatientVisit and DoctorVisit items include ended: bool and nullable accepted_at/
+ended_at strings; PatientVisit also includes session_id. Visit-message responses
 contain no other-party username, patient/doctor id or intake session id.
 
 Chat responses contain {session_id, returning, reply, step, done, emergency,
@@ -410,7 +451,8 @@ phrases and preserves first-appearance order. Catalog search uses substrings.
   doctor/request routes, accepted-visit chats.py and static pages.
 - src/app/schemas/: explicit request/response models.
 - src/app/data/: starter vocabulary and seed doctors.
-- src/app/static/: self-contained index.html, login.html, doctor.html and admin.html.
+- src/app/static/: index.html, doctor.html and admin.html share shell.css/shell.js;
+  login.html remains self-contained. CSS/JS/HTML are packaged with the app.
 - tests/: unittest checks, TestClient registration/login helper and temporary DBs.
 - docs/plan.md and docs/changelog.md: approved contracts and change history.
 

@@ -111,7 +111,8 @@ class AdminTests(unittest.TestCase):
         self.assertIn("text/html", response.headers["content-type"])
         self.assertIn('lang="fa" dir="rtl"', response.text)
         self.assertNotIn("innerHTML", response.text)
-        self.assertNotIn("<script src=", response.text)
+        self.assertIn('<script src="/assets/shell.js">', response.text)
+        self.assertIn('href="/assets/shell.css"', response.text)
 
     def test_list_projection_paging_order_and_validation(self):
         self.clock.return_value = "2030-01-01T00:01:00.000000+00:00"
