@@ -11,6 +11,9 @@ move them into a dated version section when a release is made.
 
 ### Added
 
+- Document local admin credentials in the ignored .env and an optional uv
+  --env-file launch command using the existing virtual environment.
+
 - Slice 6: configured admin login and Persian doctor-review panel with pending,
   approved, rejected and suspended lists, paging and review audit.
 - Atomic schema-v7 users rebuild and doctor review/license columns; preserve

@@ -72,6 +72,18 @@ by a patient/doctor fails startup; usernames cannot be reused across roles.
 With neither variable set, no admin is created and startup logs admin_disabled;
 previous admin accounts cannot authenticate while unconfigured.
 
+For local `.env` configuration, put APP_ADMIN_USERNAME and APP_ADMIN_PASSWORD
+in the ignored repository-root `.env` file. Edit the values there; do not commit
+the file. With `uv` installed, load it into the server's process environment:
+
+```powershell
+uv run --no-project --env-file .env .\.venv\Scripts\python.exe -m uvicorn app.main:app --app-dir src
+```
+
+This uses the existing virtual environment without installing or syncing
+dependencies. Settings still read only os.environ. Restart with this command
+after changing `.env`; startup refreshes the configured admin password hash.
+
 Log in as admin in a separate private browser session and open /admin. The panel
 shows a pending count, status tabs, synthetic doctor metadata and review audit;
 it never exposes usernames, password data, patient records, triage or chat.
@@ -282,7 +294,8 @@ Admin role only:
 
 ## Configuration
 
-Settings use os.environ; .env files are not loaded. See .env.example.
+Settings use os.environ; the application does not load .env files itself.
+The optional uv command above loads .env before launch. See .env.example.
 - APP_LOG_LEVEL defaults INFO; INFO/WARNING/ERROR/CRITICAL, case insensitive.
 - APP_DB_PATH defaults healthcare_agent.db; must be non-empty.
 - APP_COOKIE_SECURE: true/false, default false. Use true with HTTPS.
