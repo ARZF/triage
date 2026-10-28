@@ -249,7 +249,7 @@ One bottom composer follows the current stage; pending/triage and ended/full
 states prevent sending. Opening a saved conversation displays stored triage,
 including fallback, without a provider call; «تلاش دوباره» explicitly refreshes it.
 
-Doctor routes are #/queue, #/patient/<request_id> and #/profile. The queue badge and accepted
+Doctor routes are #/queue, #/patient/<request_id>, #/profile and #/assistant. The queue badge and accepted
 visits (active first, ended last) live in the sidebar with availability. The
 patient thread starts with «گزارش سامانهٔ پذیرش», structured intake, previous
 visits and the doctor-only AI warning. Admin routes are #/pending, #/approved,
@@ -295,6 +295,72 @@ come from APP_DEMO_DOCTOR_PASSWORD; the UI cannot change them. A managed-account
 
 Not implemented: email/phone, email password reset, MFA, account recovery,
 doctor account deletion, profile change history/audit or profile photos.
+
+## Independent doctor–Codex assistant
+
+Verified doctors can open «دستیار پزشک» in the dashboard. This is a separate
+Persian chat with streamed replies, Send, Stop and New Chat. Enter sends;
+Shift+Enter inserts a newline. It supports discussion of synthetic clinical
+cases for physician review, with an explicit AI-review notice. No final
+prescriptions, patient-facing answers or automated clinical actions are added.
+
+Only this chat's typed messages and one fixed server prompt are sent to Codex.
+No intake, profiles, patient/doctor visit messages, previous tasks, repository
+files or this development conversation are supplied automatically. The prompt
+is in src/app/agent/doctor_assistant.py, independent from specialty triage.
+There is no prompt editor, browsing, tools or record retrieval.
+
+Completed turns live in page memory across dashboard navigation. Leaving the
+tab stops generation; interrupted responses are marked and excluded from future
+context. Codex's normal user-message lifecycle events are ignored; only assistant
+answer text is shown. Reload, logout and New Chat clear the chat. Nothing is stored in the
+application database, browser storage or application transcript logs. Codex's
+operational state and provider-side data handling are separate; ephemeral threads
+disable session rollout persistence, not an assurance about provider retention.
+Keep using synthetic data only.
+
+Install/maintain Codex separately and make `codex` available on the server's PATH.
+Use a dedicated operator login/home, never your development Codex home or a
+directory inside this repository. For example, in PowerShell as the server operator:
+
+```powershell
+$taskCodexHome = Join-Path $env:LOCALAPPDATA "HealthcareAgentCodex"
+New-Item -ItemType Directory -Force -Path $taskCodexHome | Out-Null
+$env:CODEX_HOME = $taskCodexHome
+codex login
+$env:APP_CODEX_HOME = $taskCodexHome
+Remove-Item Env:CODEX_HOME
+# Optional: $env:APP_CODEX_MODEL = "your-accessible-model"
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --app-dir src
+```
+
+The operator completes Codex login; doctors do not sign into Codex individually.
+Do not copy development credentials or modify the ignored .env automatically.
+APP_CODEX_HOME may instead be set in that ignored file using the existing uv
+launch command. Keep its directory private to the server operator. Its optional
+config.toml may contain only model, model_reasoning_effort and
+cli_auth_credentials_store; do not install skills/plugins/hooks or instruction
+files there. Codex may create its own bundled skills/.system directory; the
+bridge permits that runtime directory while disabling skill discovery/access.
+Leave APP_CODEX_HOME empty to make assistant inference unavailable
+without affecting the existing dashboard or triage. APP_CODEX_MODEL is optional;
+an unavailable explicit model is not silently replaced.
+
+The bridge checks the installed protocol, uses strict capability overrides and
+an empty temporary working directory, and requires ephemeral threads with no
+environment, capability roots, workspace roots or instruction files. It fails
+closed for unsupported/unsafe configuration. No approval request is accepted.
+An operator-managed Codex runtime is an additional deployment requirement, not
+a new Python dependency. Current app-server protocol reference:
+[Codex App Server](https://learn.chatgpt.com/docs/app-server).
+
+There is one fresh process per request, a 120-second deadline, one active
+request per doctor and two globally per application process. Stop/disconnect
+interrupts and reaps the process. These process-local limits need a shared
+limiter and isolated runtime pool before scaling across workers. Failed requests
+are never resent automatically. User messages are limited to 4,000 characters;
+submitted history to 40 messages/40,000 characters, output to 20,000. When full,
+start a new chat; no previous turns are silently discarded.
 
 ## API
 
@@ -345,6 +411,13 @@ Patient role:
 - POST /v1/visit-requests/{id}/cancel -> updated item.
 
 Verified doctor role:
+- POST /v1/doctor/assistant/messages {messages:[{role:"user"|"assistant",content:str}]}
+  -> text/event-stream: delta {text}, done {}, or error {error:{code,message}}.
+  Completed alternating user/assistant pairs must end in the latest user message;
+  no system/developer roles or extra fields. Before streaming, ErrorResponse
+  covers 401/403 access, 422 validation, 429 assistant_busy (Retry-After:5),
+  503 assistant_unavailable and 504 assistant_timeout. Midstream failures use
+  safe error events; only final answer text is streamed, never reasoning/tool output.
 - POST /v1/doctor/heartbeat, no body -> 204; the sole presence-refresh write.
 - PUT /v1/doctor/availability {available: bool}.
 - GET /v1/doctor/requests?status=pending|accepted; omitted status returns both.
@@ -508,11 +581,12 @@ phrases and preserves first-appearance order. Catalog search uses substrings.
 
 - src/app/main.py: lifespan, routers, logging and no-store middleware.
 - src/app/core/: settings, SQLite, security, provider client and errors.
-- src/app/agent/: intake, sessions, vocabulary, bounded context and triage.
+- src/app/agent/: intake, sessions, vocabulary, bounded context, triage and the
+  isolated doctor_assistant.py Codex bridge/prompt.
 - src/app/services/accounts.py, doctors.py, visits.py, chats.py, admin.py: accounts,
   presence, seeding, broadcast, acceptance, direct messages, visit ending and review.
 - src/app/api/: auth, dependencies, chat, owned patient routes, catalogs,
-  doctor/request routes, accepted-visit chats.py and static pages.
+  doctor/request routes, accepted-visit chats.py, assistant.py SSE and static pages.
 - src/app/schemas/: explicit request/response models.
 - src/app/data/: starter vocabulary and seed doctors.
 - src/app/static/: index.html, doctor.html and admin.html share shell.css/shell.js;

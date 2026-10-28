@@ -40,6 +40,8 @@ class Settings:
     llm_api_key: str | None = field(default_factory=lambda: os.environ.get("APP_LLM_API_KEY") or None, repr=False)
     llm_model: str | None = field(default_factory=lambda: os.environ.get("APP_LLM_MODEL") or None)
     llm_timeout_seconds: float = field(default_factory=_llm_timeout)
+    codex_home: str | None = field(default_factory=lambda: os.environ.get("APP_CODEX_HOME") or None, repr=False)
+    codex_model: str | None = field(default_factory=lambda: os.environ.get("APP_CODEX_MODEL") or None)
 
     cookie_secure: bool = field(default_factory=lambda: _bool_env("APP_COOKIE_SECURE", "false"))
     session_ttl_hours: int = field(default_factory=lambda: _int_env("APP_SESSION_TTL_HOURS", "12", 1, 168))
@@ -50,6 +52,9 @@ class Settings:
     admin_password: str | None = field(default_factory=lambda: os.environ.get("APP_ADMIN_PASSWORD") or None, repr=False)
 
     def __post_init__(self) -> None:
+        for name, value in (("APP_CODEX_HOME", self.codex_home), ("APP_CODEX_MODEL", self.codex_model)):
+            if value is not None and (not value.strip() or any(ord(char) < 32 for char in value)):
+                raise ValueError(name)
         if bool(self.admin_username) != bool(self.admin_password):
             raise ValueError("APP_ADMIN_USERNAME and APP_ADMIN_PASSWORD")
         if self.admin_username is not None and not re.fullmatch(r"[a-z0-9_.-]{3,32}", self.admin_username):

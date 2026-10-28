@@ -36,6 +36,14 @@ button:disabled { opacity:.5; cursor:default; }
 #shell-main.thread-main { display:flex; flex-direction:column; padding:0; overflow:hidden; }
 .thread-heading { padding:12px 24px; border-block-end:1px solid var(--line); background:var(--surface); font-size:14px; }
 .thread-heading p { margin:0; }
+#assistant-view:not([hidden]) { display:contents; }
+.assistant-heading { display:flex; gap:12px; align-items:flex-start; justify-content:space-between; }
+.assistant-heading button { flex-shrink:0; }
+.assistant-heading p { font-size:13px; }
+.assistant-interrupted { border:1px dashed var(--danger); }
+#assistant-log .bubble p { margin:4px 0; }
+#assistant-log .bubble small { display:block; font-size:12px; }
+@media(max-width:480px) { .assistant-heading { flex-wrap:wrap; } }
 .thread-log { overflow-y:auto; overscroll-behavior:contain; flex:1; min-height:0; padding:24px max(24px,calc((100% - 860px)/2)); display:flex; flex-direction:column; gap:16px; scroll-padding-block:20px; }
 .thread-segment,.intake-log,.human-log { display:flex; flex-direction:column; gap:16px; min-width:0; }
 .thread-segment:empty,.human-log:empty { display:none; }

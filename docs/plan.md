@@ -1,6 +1,6 @@
 # Healthcare Agent: Implementation Plan and Specification
 
-Status: Slices 1a, 2a, 2b, 3, 4, 5, 6, 7a and 7b approved. Intake, vocabulary, memory, specialty triage, accounts, visits, direct text chat, admin doctor review, shared dashboards and editable profiles/passwords are in scope; future workflow decisions remain proposals.
+Status: Slices 1a, 2a, 2b, 3, 4, 5, 6, 7a, 7b and the independent doctor–Codex assistant approved. Intake, vocabulary, memory, specialty triage, accounts, visits, direct text chat, admin doctor review, shared dashboards, editable profiles/passwords and the independent synthetic-case assistant are in scope; future workflow decisions remain proposals.
 
 ## 1. Purpose
 
@@ -21,6 +21,7 @@ at a time, with an explicit API contract and a runnable check for its behavior.
 - Schema v7 adds the configured admin role, synthetic license numbers, doctor review states and a review-only audit. Suspension also ends the doctor's open visits. Admins cannot access patient data.
 - Slice 7a adds read-only conversation list/detail routes, shared CSS/JS dashboard assets and one continuous patient/doctor thread. Page loads resume existing conversations. Schema remains v7.
 - Slice 7b adds editable profiles and password changes, a dedicated heartbeat, read-only doctor polling and schema v8. Profile edits preserve historical intakes and cannot overwrite a newer profile through stale intake completion. The online window is 90 seconds.
+- The independent doctor–Codex assistant adds a verified-doctor-only ephemeral streaming chat without automatic application data or repository context. It reuses existing folders/dependencies and keeps schema v8.
 - `src/app/core/config.py` defines frozen settings read from `os.environ`. `APP_LOG_LEVEL` defaults to `INFO`; INFO, WARNING, ERROR, and CRITICAL are accepted (case insensitive). Invalid values fail startup. The application does not load `.env` files.
 
 ## 3. Project boundaries
@@ -41,6 +42,7 @@ at a time, with an explicit API contract and a runnable check for its behavior.
 - Slice 6 supersedes earlier admin exclusions, doctor registration requirements and schema version. Review audit is implemented; patient/chat audit remains excluded. It reuses existing folders and dependencies.
 - Slice 7a supersedes earlier self-contained dashboard, history-aside and visit-chat-panel descriptions. Only shell.css and shell.js are new files; no folders, dependencies or schema changes. Login remains unchanged.
 - Slice 7b supersedes earlier profile/password exclusions, completed-session prefill source, GET presence side effect, 45-second online window and five-second identity refresh. Existing folders/dependencies are reused.
+- The independent assistant permits synthetic clinical-option discussion for physician review only in that separate chat. Existing intake/triage prompts, record-access boundaries and clinical-action exclusions remain unchanged.
 
 ## 4. Decisions for persistence and future slices
 
@@ -368,6 +370,21 @@ Complete this section for each agreed feature before writing its code:
 - **Acceptance examples:** edit patient profile then start new intake and see edited welcome-back; finish stale unfinished intake without overwriting a newer profile edit; change password while another browser session becomes unauthorized; freely edit approved doctor name/expertise, reject specialty change during active visits, then resubmit after ending and see admin marker; doctor stays online during two minutes in another tab.
 - **Runnable check:** baseline and final full unittest suites, temporary databases/no network. Cover migration/backfill/rollback/concurrency/equivalence, heartbeat-only presence/read-only GET/89–91-second bounds, patient validation/ownership/stale completion/history preservation/cascade, every doctor status/auto-verify/uniqueness/sync rule, password hash/throttle/session/log privacy, static route/sink checks. Editable install and real-browser walkthrough; report anything unverified.
 - **NOT implemented:** email/phone fields, password reset by email, MFA, account recovery, doctor account deletion, profile change history/audit, profile photos.
+
+### Feature: independent doctor–Codex assistant chat
+
+- **Status:** approved.
+- **User outcome:** verified doctors open «دستیار پزشک» in their dashboard and independently discuss synthetic clinical cases with Codex, using the server operator's dedicated login.
+- **Scope:** Persian RTL streaming chat at #/assistant; no automatic intake, profile, visit, previous-task or repository context. No record retrieval, browsing, prescriptions, patient-facing responses or workflow actions. No new folders, dependencies or schema migration (schema stays v8).
+- **API contract:** POST /v1/doctor/assistant/messages accepts {messages:[{role:user|assistant,content:str}]} with completed alternating pairs followed by the latest user message. Verified doctors only. SSE delta {text}, done {}, error {error:{code,message}}; only final assistant answer text is forwarded. Before streaming, existing ErrorResponse: 401/403 authorization, 422 validation, 429 concurrency, 503 missing/unusable/unsafe runtime, 504 deadline.
+- **Validation:** forbid extra fields and system/developer roles, require nonempty stripped content and valid order; user messages at most 4,000 characters, at most 40 submitted messages and 40,000 total characters. Never silently truncate history. Bound generated output at 20,000 characters and request a new chat when history is full.
+- **Agent behavior:** one server-owned prompt in agent/doctor_assistant.py instructs Persian clinical decision support for physician review, focused questions, uncertainty, no invented findings/references/record access, urgent-situation limitations, no confirmed diagnoses/final prescriptions, untrusted conversation data and no tools. Use the approved prompt verbatim with one format instruction for the submitted JSON transcript.
+- **Runtime/isolation:** use stdlib subprocess stdio with codex app-server, a dedicated APP_CODEX_HOME outside this repository and the developer's Codex home, and an empty temporary working directory. APP_CODEX_MODEL optionally overrides the operator's model. Check installed protocol isolation fields, strict configuration and an ephemeral thread with no environments/capability/workspace roots. Disable shell/files, MCP/apps/plugins/skills/hooks/search/memories/delegation; reject unexpected tools/approvals and fail closed when isolation cannot be enforced. No existing threads are resumed or credentials copied by the application.
+- **Failure behavior:** 120-second deadline, no automatic retries, safe Persian UI messages, Stop/navigation/disconnection interrupts and terminates/reaps the subprocess. One active call per doctor and two globally per application process; ponytail comments describe process-local scaling and subprocess overhead ceilings.
+- **Access and data handling:** no database/log transcript writes or browser storage. Page memory retains completed turns across navigation; reload/logout/New Chat clears them. Interrupted turns are visibly marked and excluded from future context. Provider-side handling is separate from application persistence. Never log credentials, raw Codex output, prompts or answers.
+- **Demo:** reuse forest tokens, responsive layout and synthetic banner. Doctor/assistant bubbles, labeled multiline composer (Enter sends, Shift+Enter newline), Send/Stop/New Chat, clear loading/errors and «پاسخ هوش مصنوعی پیشنهادی است و نیاز به بررسی پزشک دارد.» Render textContent only.
+- **Acceptance examples:** first answer streams; follow-up includes only this chat's completed turns; navigation aborts while retaining completed history; New Chat/reload clears it; unverified doctors cannot call it; unavailable login/runtime displays a safe failure without affecting existing dashboard/heartbeat.
+- **Runnable check:** baseline/final full unittest suites; new mocked-protocol checks for validation/access/isolation/ephemeral streaming/failures/cancellation/deadline/cleanup/concurrency/privacy; desktop/mobile browser checks and a synthetic live Codex check only if a dedicated login is available. Report all unverified behavior. Do not commit or push.
 
 ## 6. Coding and verification rules
 
@@ -1094,3 +1111,106 @@ Files changed:
   test_persistence.py, test_triage.py and test_visits.py.
 
 Stop after Slice 7b. Do not commit or push.
+
+## 23. Independent doctor–Codex assistant implementation and verification (2026-10-26)
+
+- [x] Add the approved section-5 feature before implementation.
+- [x] Add the verified-doctor assistant endpoint, strict transcript models and
+  bounded SSE answer/error/done contract, preserving existing ErrorResponse.
+- [x] Add one independent prompt and isolated ephemeral Codex bridge with
+  dedicated operator home/model settings, no record reads or thread resumption.
+- [x] Check installed protocol capabilities, strict disabled-tool configuration,
+  empty environments/capability/workspace roots and empty instruction sources.
+- [x] Bound per-process concurrency/output/deadline and interrupt/reap on failure,
+  Stop and disconnect; leave ponytail comments for deployment ceilings.
+- [x] Add the Persian RTL assistant route, streamed bubbles, keyboard controls,
+  Stop/New Chat, memory-only completed history and marked/excluded partial turns.
+- [x] Preserve triage, heartbeat and schema v8; add no dependencies or repository
+  folders. Do not commit or push.
+
+PowerShell from the repository root:
+
+```text
+.\.venv\Scripts\python.exe -m unittest discover tests
+Before editing: Ran 185 tests in 125.562s
+OK
+Final: Ran 202 tests in 108.057s
+OK
+```
+
+Seventeen new tests cover roles, transcript bounds/order/extras, no record writes,
+explicit-only context, one prompt, isolation flags/metadata, old-runtime refusal,
+safe SSE success/failure, notifications preceding RPC replies, exclusion of
+reasoning/commentary, malformed/oversized output, timeout, cancellation/interrupt,
+terminate/kill/reap, concurrency slots, environment filtering and log privacy.
+All previous tests remain. Node syntax checks passed for shell.js and all three
+dashboard inline scripts; git diff --check passed. The existing Starlette/httpx
+deprecation warning remains. Project Python/loopback checks used sandbox escalation.
+
+Installed Codex 0.164.0-alpha.11.1 was checked using a temporary credential-free
+home, generated protocol schema and stdio initialize/thread-start calls. This
+caught and corrected the installed sandbox enum to read-only. Thread creation
+reported ephemeral=true, zero instruction sources and zero workspace roots.
+The probe intentionally stubbed the login check and stopped before turn/start:
+it sent no inference input and is not a live model-answer test. Codex creates
+its own bundled skills/.system directory; this is allowed while custom skills
+are rejected and skill discovery/capability/environment access are disabled.
+
+Browser automation used the real dashboard/API with an explicitly synthetic
+test-only stream replacing Codex methods in a temporary server process. Its
+answer was visibly labeled as a UI test, not Codex output. It verified Send and
+Enter, Shift+Enter multiline drafts, streaming controls, follow-up payload counts,
+profile/queue navigation preserving completed history, Stop and navigation
+cancellation, marked partial replies omitted from the next request, New Chat
+during generation, reload clearing and a Persian unavailable-runtime message.
+No automatic resends occurred. Desktop 1280px and mobile 390px views had no
+horizontal overflow; screenshots were inspected/saved outside the repository.
+No browser console errors were observed in final tab checks. Heartbeat timestamps
+continued updating after registration during the browser walkthrough.
+
+The synthetic server was stopped and the unmocked app was started using the
+normal Uvicorn command with --port 8002 and a disposable temporary database.
+/health, /docs, /doctor, /demo, /admin and both shared assets returned 200.
+With APP_CODEX_HOME unset, the actual assistant returned 503 assistant_unavailable
+without affecting the dashboard. Schema remained 8. Temporary servers/tabs were
+stopped/closed, the viewport reset and existing listeners/databases/.env left alone.
+
+Unverified: live Codex inference/clinical answer quality, because no dedicated
+operator login was configured; true hidden-tab throttling, real mobile keyboard
+behavior and a browser wait through the full 120-second timeout. Protocol/API
+tests cover deadlines and failures; the browser stream was synthetic. No real
+patient information or production credentials were used. The operator must
+complete the dedicated Codex login described in README before real inference.
+
+Files changed: .env.example, README.md, docs/plan.md, docs/changelog.md;
+src/app/core/config.py, main.py, static/doctor.html and static/shell.css;
+new src/app/agent/doctor_assistant.py, api/assistant.py, schemas/assistant.py
+and tests/test_assistant.py. No commit or push.
+
+## 24. Codex user-message lifecycle correction (2026-10-26)
+
+The first real authenticated connectivity test exposed a bridge bug: Codex emits
+item/started and item/completed for its normal userMessage before answering.
+The bridge treated that legitimate input lifecycle as tool execution and ended
+the SSE stream with assistant_unavailable. Ignore those lifecycle events without
+forwarding their content; continue rejecting tool items and approval requests.
+Add a regression test covering both input events followed by a successful answer.
+
+Before editing, all 17 assistant tests passed, demonstrating the missing real
+protocol case. After the correction, a synthetic live request emitted only final
+assistant answer deltas and ended with turn status completed and SSE done.
+Only event types, phases and safe outcome categories were inspected; neither the
+user's medical text nor credentials were printed/copied into diagnostics.
+Historical section-23 live-inference limitations describe that earlier run;
+this later connectivity check confirms transport only, not clinical quality.
+
+Verification: .\.venv\Scripts\python.exe -m unittest discover tests -p
+test_assistant.py passed 18 tests in 2.110s. The full command
+.\.venv\Scripts\python.exe -m unittest discover tests passed 203 tests in
+137.521s. git diff --check passed; no folders/dependencies/schema changes.
+
+The running port-8000 server has no --reload flag. Leave its operator-provided
+environment and process intact; restart it from the same configured PowerShell
+window to load the correction. Changes: agent/doctor_assistant.py,
+tests/test_assistant.py, README.md, docs/plan.md and docs/changelog.md. No commit
+or push.

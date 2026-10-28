@@ -1,6 +1,6 @@
 <!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>داشبورد پزشک آزمایشی</title><link rel="stylesheet" href="/assets/shell.css"><style>h2{font-size:23px;font-weight:500}h3{font-size:19px}p,dd,h3{overflow-wrap:anywhere;white-space:pre-wrap}dt{font-size:14px;color:var(--muted)}dd{margin:4px 0 12px}details{border-block-start:1px solid var(--line);padding-block-start:12px;margin-block-start:16px}summary{cursor:pointer;min-height:44px}.actions{display:flex;gap:8px;flex-wrap:wrap}#availability-control label{display:flex;align-items:center;gap:8px;min-height:44px}#doctor-name{overflow-wrap:anywhere}.thread-dashboard{display:contents}#queue-status{padding:12px 0}#waiting{margin:16px}.doctor-file dl{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}#doctor-thread>.thread-card dl{display:grid;grid-template-columns:130px minmax(0,1fr);gap:8px}#doctor-thread>.thread-card dd{margin:0}#doctor-thread>.thread-card dt{padding-block:4px}@media(max-width:480px){#doctor-thread>.thread-card dl{grid-template-columns:minmax(0,1fr);gap:4px}}</style></head><body><div id="app-layout" class="app-layout sidebar-closed"><div class="banner">دموی آزمایشی — فقط اطلاعات ساختگی</div><header class="topbar"><button id="menu-toggle" type="button" aria-expanded="false" aria-controls="shell-sidebar" aria-label="باز کردن فهرست">فهرست</button><h1 id="shell-title">داشبورد پزشک</h1><span id="display-name" class="display-name"></span><button id="logout" type="button" class="secondary">خروج</button></header>
 <aside id="shell-sidebar"><nav id="shell-nav" aria-label="درخواست‌ها و بیماران پزشک"></nav><div class="sidebar-extra"><p id="doctor-name"></p><div id="availability-control" hidden><label><input id="available" type="checkbox">پذیرش درخواست</label><span id="online-status" class="chip">آفلاین</span></div></div></aside><button id="shell-backdrop" type="button" aria-label="بستن فهرست" hidden></button>
-<main id="shell-main"><section id="waiting" class="panel" hidden role="status"></section><section id="doctor-profile-view" class="profile-view" hidden aria-label="پروفایل پزشک"><section class="thread-card"><h2>پروفایل پزشک</h2><p class="muted">فقط اطلاعات ساختگی وارد کنید. تغییر تخصص یا شمارهٔ نظام پزشکی ممکن است نیازمند بررسی دوبارهٔ مدیر باشد.</p><p id="doctor-profile-load" role="status"></p><p id="doctor-profile-score"></p><p id="doctor-profile-status" class="chip"></p><p id="doctor-profile-note" class="muted"></p><form id="doctor-profile-form" novalidate><div id="doctor-profile-fields" class="profile-grid"></div><button id="doctor-profile-save" type="submit">ذخیرهٔ مشخصات</button><p id="doctor-profile-result" role="status"></p></form></section><section id="doctor-password-section" class="thread-card"></section></section><section id="dashboard" hidden><div id="queue-status"><p id="status" role="status">در حال دریافت...</p></div><p id="error" class="error" role="alert"></p><section id="requests" aria-label="صف درخواست‌ها"></section><div id="doctor-thread" class="thread-log" role="log" aria-live="polite" aria-label="گفت‌وگو با بیمار" hidden></div><div id="doctor-composer" class="composer" hidden></div></section></main></div><script src="/assets/shell.js"></script><script>const nameLine=document.getElementById("doctor-name"),available=document.getElementById("available"),availabilityControl=document.getElementById("availability-control");
+<main id="shell-main"><section id="waiting" class="panel" hidden role="status"></section><section id="doctor-profile-view" class="profile-view" hidden aria-label="پروفایل پزشک"><section class="thread-card"><h2>پروفایل پزشک</h2><p class="muted">فقط اطلاعات ساختگی وارد کنید. تغییر تخصص یا شمارهٔ نظام پزشکی ممکن است نیازمند بررسی دوبارهٔ مدیر باشد.</p><p id="doctor-profile-load" role="status"></p><p id="doctor-profile-score"></p><p id="doctor-profile-status" class="chip"></p><p id="doctor-profile-note" class="muted"></p><form id="doctor-profile-form" novalidate><div id="doctor-profile-fields" class="profile-grid"></div><button id="doctor-profile-save" type="submit">ذخیرهٔ مشخصات</button><p id="doctor-profile-result" role="status"></p></form></section><section id="doctor-password-section" class="thread-card"></section></section><section id="assistant-view" hidden aria-label="دستیار پزشک"><div class="thread-heading assistant-heading"><div><strong>گفت‌وگو با Codex</strong><p class="muted">این گفت‌وگو مستقل است؛ پرونده یا گفت‌وگوهای بیمار خودکار ارسال نمی‌شود. با بارگذاری دوباره پاک می‌شود.</p><p>پاسخ هوش مصنوعی پیشنهادی است و نیاز به بررسی پزشک دارد.</p></div><button id="assistant-new" class="secondary" type="button">گفت‌وگوی جدید</button></div><div id="assistant-log" class="thread-log" role="log" aria-label="گفت‌وگو با دستیار" aria-live="polite"><p id="assistant-empty" class="thread-card">پرسش خود را دربارهٔ یک مورد ساختگی بنویسید. این بخش فقط متن‌هایی را می‌بیند که همین‌جا وارد می‌کنید.</p></div><div class="composer"><form id="assistant-form" novalidate><label for="assistant-input">پرسش پزشک — فقط داده‌های ساختگی</label><textarea id="assistant-input" maxlength="4000" rows="3" dir="auto" aria-describedby="assistant-count assistant-error" placeholder="پرسش یا جزئیات ساختگی را بنویسید…"></textarea><div class="visit-chat-actions"><span id="assistant-count" class="muted"></span><div class="actions"><button id="assistant-send" type="submit">ارسال</button><button id="assistant-stop" class="secondary" type="button" disabled>توقف</button></div></div><p id="assistant-progress" role="status" class="muted"></p><p id="assistant-error" role="alert" class="error"></p></form></div></section><section id="dashboard" hidden><div id="queue-status"><p id="status" role="status">در حال دریافت...</p></div><p id="error" class="error" role="alert"></p><section id="requests" aria-label="صف درخواست‌ها"></section><div id="doctor-thread" class="thread-log" role="log" aria-live="polite" aria-label="گفت‌وگو با بیمار" hidden></div><div id="doctor-composer" class="composer" hidden></div></section></main></div><script src="/assets/shell.js"></script><script>const nameLine=document.getElementById("doctor-name"),available=document.getElementById("available"),availabilityControl=document.getElementById("availability-control");
 const dashboard=document.getElementById("dashboard"),waiting=document.getElementById("waiting"),requestList=document.getElementById("requests"),statusLine=document.getElementById("status"),errorLine=document.getElementById("error");
 const thread=document.getElementById("doctor-thread"),composer=document.getElementById("doctor-composer"),main=document.getElementById("shell-main");
 let user=null,items=[],specialtyNames={},busy=false,loading=false,refreshAgain=false,liveChat=null,openedId=null,currentHash=location.hash,renderedBusy=false,dataLoaded=false;
@@ -32,7 +32,7 @@ function updateAvailability(){document.getElementById("online-status").textConte
 function sidebar(){
   if(!user?.doctor?.verified){Shell.setItems([{id:"profile",hash:"#/profile",label:"پروفایل"}]);return;}
   const accepted=items.filter(item=>item.status==="accepted").sort((a,b)=>Number(a.ended)-Number(b.ended)||b.created_at.localeCompare(a.created_at));
-  Shell.setItems([{id:"profile",hash:"#/profile",label:"پروفایل"},{id:"queue",hash:"#/queue",label:"صف درخواست‌ها",badge:items.filter(item=>item.status==="pending").length},{group:"بیماران من"},...accepted.map(item=>({id:item.id,hash:"#/patient/"+item.id,label:item.specialty.name_fa+" · "+(urgencyLabels[item.urgency]||"نامشخص"),secondary:(item.patient.age===null?"سن ثبت نشده":item.patient.age.toLocaleString("fa-IR")+" سال")+" · "+(item.patient.symptoms||"").slice(0,60),status:item.ended?"پایان‌یافته":"در حال گفت‌وگو",title:"گفت‌وگو با بیمار"}))]);
+  Shell.setItems([{id:"profile",hash:"#/profile",label:"پروفایل"},{id:"assistant",hash:"#/assistant",label:"دستیار پزشک"},{id:"queue",hash:"#/queue",label:"صف درخواست‌ها",badge:items.filter(item=>item.status==="pending").length},{group:"بیماران من"},...accepted.map(item=>({id:item.id,hash:"#/patient/"+item.id,label:item.specialty.name_fa+" · "+(urgencyLabels[item.urgency]||"نامشخص"),secondary:(item.patient.age===null?"سن ثبت نشده":item.patient.age.toLocaleString("fa-IR")+" سال")+" · "+(item.patient.symptoms||"").slice(0,60),status:item.ended?"پایان‌یافته":"در حال گفت‌وگو",title:"گفت‌وگو با بیمار"}))]);
 }
 function report(item){
   const article=document.createElement("article");article.className="thread-card";
@@ -50,6 +50,10 @@ function report(item){
 }
 function render(){
   if(!user)return;
+  assistantView.hidden=currentHash!=="#/assistant"||!user.doctor.verified;
+  if(currentHash==="#/assistant"&&user.doctor.verified){
+    liveChat?.dispose();liveChat=null;openedId=null;dashboard.hidden=true;profileView.hidden=true;main.classList.add("thread-main");sidebar();assistantControls();return;
+  }
   if(currentHash==="#/profile"){
     liveChat?.dispose();liveChat=null;openedId=null;dashboard.hidden=true;main.classList.remove("thread-main");profileView.hidden=false;sidebar();
     profileStatus();if(!profileLoaded&&!profileLoading)loadDoctorProfile();return;
@@ -96,7 +100,7 @@ available.addEventListener("change",async()=>{
   finally{busy=false;available.disabled=false;updateAvailability();if(available.checked)await heartbeat();await refresh();}
 });
 document.getElementById("logout").addEventListener("click",async()=>{
-  if(busy)return;busy=true;try{await request("/v1/auth/logout",undefined,"POST");location.replace("/login");}catch{errorLine.textContent="خروج انجام نشد. دوباره تلاش کنید.";}finally{busy=false;}
+  if(busy)return;resetAssistant();busy=true;try{await request("/v1/auth/logout",undefined,"POST");location.replace("/login");}catch{errorLine.textContent="خروج انجام نشد. دوباره تلاش کنید.";}finally{busy=false;}
 });
 let identityLoading=false;
 async function refreshIdentity(force=false){
@@ -108,6 +112,7 @@ async function refreshIdentity(force=false){
     if(user.role!=="doctor"){location.replace(user.role==="admin"?"/admin":"/demo");return;}
     nameLine.textContent=user.display_name;document.getElementById("display-name").textContent=user.display_name;
     if(!user.doctor.verified){
+      resetAssistant();assistantView.hidden=true;
       items=[];dataLoaded=false;requestList.replaceChildren();
       liveChat?.dispose();liveChat=null;openedId=null;sidebar();
       dashboard.hidden=true;availabilityControl.hidden=true;waiting.hidden=false;waiting.replaceChildren();
@@ -118,7 +123,7 @@ async function refreshIdentity(force=false){
       return;
     }
     waiting.hidden=true;availabilityControl.hidden=false;dashboard.hidden=false;available.checked=user.doctor.available;
-    updateAvailability();if(!previous?.doctor?.verified){await heartbeat();render();await refresh();}else if(currentHash==="#/profile")render();
+    updateAvailability();if(!previous?.doctor?.verified){await heartbeat();render();await refresh();}else if(["#/profile","#/assistant"].includes(currentHash))render();
   }catch(error){if(error.message!=="redirect"){waiting.hidden=false;waiting.textContent="دریافت وضعیت حساب انجام نشد. دوباره تلاش می‌شود.";}}
   finally{identityLoading=false;}
 }
@@ -199,7 +204,73 @@ async function heartbeat(){
   finally{heartbeatLoading=false;}
 }
 
+const assistantView=document.getElementById("assistant-view"),assistantLog=document.getElementById("assistant-log"),assistantInput=document.getElementById("assistant-input"),assistantError=document.getElementById("assistant-error"),assistantProgress=document.getElementById("assistant-progress");
+let assistantHistory=[],assistantTurn=null;
+const characters=text=>[...text].length;
+function assistantControls(){
+  const count=characters(assistantInput.value.trim()),full=assistantHistory.length>=40||assistantHistory.reduce((sum,item)=>sum+characters(item.content),0)+count>40000;
+  document.getElementById("assistant-count").textContent=count.toLocaleString("fa-IR")+" / ۴٬۰۰۰";
+  document.getElementById("assistant-send").disabled=Boolean(assistantTurn)||!count||count>4000||full;
+  document.getElementById("assistant-stop").disabled=!assistantTurn;
+  assistantInput.disabled=Boolean(assistantTurn);
+  if(full&&!assistantTurn)assistantError.textContent="ظرفیت این گفت‌وگو پر شده است؛ گفت‌وگوی جدید شروع کنید.";
+}
+function stopAssistant(){if(assistantTurn){assistantTurn.controller.abort();assistantTurn.interrupted=true;}}
+function resetAssistant(){
+  stopAssistant();assistantTurn=null;assistantHistory=[];assistantInput.value="";assistantError.textContent="";assistantProgress.textContent="";
+  assistantLog.replaceChildren();const empty=paragraph(assistantLog,"پرسش خود را دربارهٔ یک مورد ساختگی بنویسید. این بخش فقط متن‌هایی را می‌بیند که همین‌جا وارد می‌کنید.","thread-card");empty.id="assistant-empty";assistantControls();
+}
+function assistantBubble(role,text){
+  document.getElementById("assistant-empty")?.remove();const bubble=document.createElement("article");bubble.className="bubble"+(role==="user"?" user":"");
+  const label=document.createElement("small");label.textContent=role==="user"?"شما":"Codex";const content=document.createElement("p");content.dir="auto";content.textContent=text;bubble.append(label,content);assistantLog.append(bubble);assistantLog.scrollTop=assistantLog.scrollHeight;return {bubble,content};
+}
+async function sendAssistant(event){
+  event?.preventDefault();if(assistantTurn||!user?.doctor?.verified)return;assistantError.textContent="";assistantControls();
+  if(document.getElementById("assistant-send").disabled)return;
+  const message={role:"user",content:assistantInput.value.trim()},reply=assistantBubble("assistant","");
+  const userBubble=assistantBubble("user",message.content);assistantLog.insertBefore(userBubble.bubble,reply.bubble);
+  const turn={controller:new AbortController(),interrupted:false};assistantTurn=turn;assistantInput.value="";assistantProgress.textContent="در حال دریافت پاسخ…";assistantControls();let text="",complete=false,reader;
+  const timer=setTimeout(()=>turn.controller.abort(),130000);
+  try{
+    const response=await fetch("/v1/doctor/assistant/messages",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify({messages:[...assistantHistory,message]}),signal:turn.controller.signal});
+    if(!response.ok){
+      if(response.status===401){resetAssistant();location.replace("/login");}
+      if(response.status===403)refreshIdentity(true);
+      const errors={403:"دسترسی دستیار فقط برای پزشک تأییدشده است.",422:"متن یا ظرفیت گفت‌وگو معتبر نیست؛ آن را بررسی کنید یا گفت‌وگوی جدید شروع کنید.",429:"دستیار مشغول است؛ چند ثانیه بعد دوباره تلاش کنید.",503:"اتصال Codex آماده نیست؛ تنظیمات و ورود سرور باید بررسی شود.",504:"زمان دریافت پاسخ تمام شد."};
+      throw Error(errors[response.status]||"ارسال پرسش انجام نشد.");
+    }
+    if(!response.headers.get("Content-Type")?.startsWith("text/event-stream")||!response.body)throw Error("پاسخ دستیار معتبر نیست.");
+    reader=response.body.getReader();const decoder=new TextDecoder();let buffer="";
+    while(!complete){
+      const part=await reader.read();if(part.done)break;buffer+=decoder.decode(part.value,{stream:true});let boundary;
+      while((boundary=buffer.indexOf("\n\n"))!==-1){
+        const frame=buffer.slice(0,boundary);buffer=buffer.slice(boundary+2);const lines=frame.split("\n"),kind=lines.find(line=>line.startsWith("event: "))?.slice(7),data=JSON.parse(lines.filter(line=>line.startsWith("data: ")).map(line=>line.slice(6)).join("\n"));
+        if(kind==="delta"&&typeof data.text==="string"){
+          const nearBottom=assistantLog.scrollHeight-assistantLog.scrollTop-assistantLog.clientHeight<100;text+=data.text;if(characters(text)>20000)throw Error("پاسخ بیش از ظرفیت مجاز است.");reply.content.textContent=text;if(nearBottom)assistantLog.scrollTop=assistantLog.scrollHeight;
+        }else if(kind==="done"){complete=true;break;}
+        else if(kind==="error")throw Error(data.error?.code==="assistant_timeout"?"زمان دریافت پاسخ تمام شد.":"دریافت پاسخ کامل نشد؛ دوباره به‌صورت دستی تلاش کنید.");
+        else throw Error("پاسخ دستیار معتبر نیست.");
+      }
+      if(buffer.length>100000)throw Error("پاسخ دستیار معتبر نیست.");
+    }
+    if(!complete||!text.trim()||turn.controller.signal.aborted)throw Error("دریافت پاسخ کامل نشد.");
+    assistantHistory.push(message,{role:"assistant",content:text});
+  }catch(error){
+    complete=false;reply.bubble.classList.add("assistant-interrupted");const note=document.createElement("small");note.textContent="پاسخ ناتمام — در ادامهٔ گفت‌وگو ارسال نمی‌شود";reply.bubble.append(note);
+    if(assistantTurn===turn){assistantInput.value=message.content;assistantError.textContent=turn.interrupted?"پاسخ متوقف شد؛ می‌توانید پرسش را ویرایش و دوباره ارسال کنید.":error.name==="AbortError"?"زمان دریافت پاسخ تمام شد؛ ارسال خودکار تکرار نمی‌شود.":error instanceof SyntaxError?"پاسخ دستیار معتبر نیست؛ دوباره به‌صورت دستی تلاش کنید.":error instanceof TypeError?"ارتباط با دستیار برقرار نشد؛ اتصال را بررسی و دوباره به‌صورت دستی تلاش کنید.":error.message;}
+  }finally{
+    clearTimeout(timer);await reader?.cancel().catch(()=>{});turn.controller.abort();
+    if(assistantTurn===turn){assistantTurn=null;assistantProgress.textContent=complete?"پاسخ کامل شد.":"";assistantControls();if(currentHash==="#/assistant")assistantInput.focus();}
+  }
+}
+document.getElementById("assistant-form").addEventListener("submit",sendAssistant);
+assistantInput.addEventListener("input",()=>{assistantError.textContent="";assistantControls();});
+assistantInput.addEventListener("keydown",event=>{if(event.key==="Enter"&&!event.shiftKey&&!event.isComposing){event.preventDefault();sendAssistant();}});
+document.getElementById("assistant-stop").addEventListener("click",stopAssistant);
+document.getElementById("assistant-new").addEventListener("click",()=>{resetAssistant();assistantInput.focus();});
+assistantControls();
+
 document.addEventListener("visibilitychange",()=>{if(!document.hidden){refreshIdentity();refresh();}});
-Shell.init({title:"داشبورد پزشک",items:[{id:"queue",hash:"#/queue",label:"صف درخواست‌ها",badge:0}],isRoute:hash=>hash==="#/profile"||/^#\/patient\/[a-f0-9]{32}$/.test(hash),defaultRoute:()=>user&&!user.doctor.verified?"#/profile":"#/queue",onRoute:hash=>{profileVersion++;profileLoaded=false;liveChat?.dispose();liveChat=null;openedId=null;currentHash=hash;render();}});
+Shell.init({title:"داشبورد پزشک",items:[{id:"queue",hash:"#/queue",label:"صف درخواست‌ها",badge:0}],isRoute:hash=>hash==="#/assistant"||hash==="#/profile"||/^#\/patient\/[a-f0-9]{32}$/.test(hash),defaultRoute:()=>user&&!user.doctor.verified?"#/profile":"#/queue",onRoute:hash=>{if(hash!=="#/assistant")stopAssistant();profileVersion++;profileLoaded=false;liveChat?.dispose();liveChat=null;openedId=null;currentHash=hash;render();}});
 (async()=>{try{specialtyNames=Object.fromEntries((await request("/v1/specialties")).map(item=>[item.code,item.name_fa]));}catch{}await refreshIdentity();setInterval(refreshIdentity,15000);setInterval(refresh,10000);setInterval(heartbeat,20000);})();
 </script></body></html>

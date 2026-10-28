@@ -20,6 +20,7 @@ from app.api.chats import router as visit_chat_router
 from app.services.doctors import seed_doctors
 from app.services.admin import seed_admin
 from app.api.admin import router as admin_router
+from app.api.assistant import router as assistant_router
 
 settings = Settings()
 configure_logging(settings)
@@ -47,6 +48,7 @@ app.include_router(auth_router)
 app.include_router(visit_router)
 app.include_router(visit_chat_router)
 app.include_router(admin_router)
+app.include_router(assistant_router)
 register_exception_handlers(app)
 
 

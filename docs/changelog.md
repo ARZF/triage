@@ -7,6 +7,9 @@ move them into a dated version section when a release is made.
 
 ### Fixed
 
+- Ignore normal Codex userMessage lifecycle events in the doctor assistant
+  instead of rejecting them as tool execution and aborting every reply.
+
 - Keep verified doctors present with a dedicated visibility-independent heartbeat
   and a 90-second online window; doctor request GETs no longer write presence/expiry.
 - Prevent completed stale intakes from overwriting a newer patient-profile edit;
@@ -16,6 +19,14 @@ move them into a dated version section when a release is made.
 - Allow configured providers to retry stored triage fallbacks and upgrade them after valid output; preserve fallback on failure and never overwrite a stored LLM result, including concurrent retries.
 
 ### Added
+
+- Independent Persian doctor-Codex assistant tab with streamed answers, Stop/New
+  Chat and page-memory-only history; no automatic patient or development context.
+- Verified-doctor assistant SSE endpoint with strict transcript bounds, dedicated
+  operator login, ephemeral isolated Codex processes, cancellation/cleanup and
+  per-process concurrency limits. Existing triage and schema v8 stay unchanged.
+- Mocked protocol/API checks for assistant access, isolation, privacy, failures
+  and streaming lifecycle; dedicated runtime setup in the README.
 
 - Slice 7b: editable patient health and doctor profiles, own-profile endpoints,
   Persian profile/password forms and admin resubmission markers.
