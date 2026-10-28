@@ -1,47 +1,40 @@
 <!doctype html>
 <html lang="fa" dir="rtl">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ورود و ثبت‌نام آزمایشی</title>
-<style>:root{--paper:#f5f5ef;--surface:#fff;--ink:#203b35;--muted:#576b64;--line:#d5ddd5;--accent:#245d48;--tint:#eaf1e9;--danger:#9c2929}
-*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.65 Tahoma,"Segoe UI",sans-serif}
-.banner{padding:10px 16px;text-align:center;background:var(--ink);color:white}.shell{max-width:1050px;margin:auto;padding:24px 16px}
-header{display:flex;justify-content:space-between;gap:16px;align-items:center;flex-wrap:wrap}h1{font-size:28px;font-weight:500}h2{font-size:23px;font-weight:500}h3{font-size:19px}
-button,input,select{font:inherit;min-height:44px;border:1px solid var(--line);border-radius:6px;padding:8px 12px}button{background:var(--accent);color:white;cursor:pointer}button:disabled{opacity:.5;cursor:default}
-input,select{width:100%;background:white;color:var(--ink)}input[type=checkbox]{width:auto}label{display:block;margin:12px 0 6px}fieldset{border:0;padding:0;margin:0}
-:focus-visible{outline:3px solid var(--accent);outline-offset:3px}.tabs{display:flex;gap:8px;margin:16px 0}.tabs button[aria-pressed=false]{background:white;color:var(--ink)}
-.panel,.card{border:1px solid var(--line);border-radius:8px;background:white;padding:20px;margin:16px 0;min-width:0}.muted{color:var(--muted)}.error{color:var(--danger)}.error:empty{display:none}
-.chip{display:inline-block;border:1px solid var(--line);background:var(--tint);border-radius:14px;padding:3px 10px;margin:3px}.tags{display:flex;flex-wrap:wrap;gap:6px}
-p,dd,pre,h3{overflow-wrap:anywhere;white-space:pre-wrap}dt{font-size:14px;color:var(--muted)}dd{margin:4px 0 12px}details{border-top:1px solid var(--line);padding-top:12px;margin-top:16px}summary{cursor:pointer;min-height:44px}pre{font:inherit}.actions{display:flex;gap:8px;flex-wrap:wrap}
-[hidden]{display:none!important}@media(max-width:600px){h1{font-size:24px}.panel,.card{padding:16px}.actions button{flex:1}}.shell{max-width:540px}.submit{width:100%;margin-top:20px}</style></head>
-<body>
-<div class="banner">دموی آزمایشی — فقط اطلاعات ساختگی</div>
-<main class="shell">
-<h1>ورود به دموی سلامت</h1>
-<p class="muted">از نام واقعی، اطلاعات شخصی و گذرواژه‌ای که جای دیگری استفاده می‌کنید استفاده نکنید.</p>
-<nav class="tabs" aria-label="ورود یا ثبت‌نام">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ورود و ثبت‌نام · Triage</title>
+<link rel="stylesheet" href="/assets/shell.css"></head>
+<body class="auth-page"><a class="skip-link" href="#auth-form">رفتن به فرم ورود</a>
+<div class="banner">داده‌ها و حساب‌های نمونه · از درج اطلاعات واقعی و شناسایی بیمار خودداری کنید</div>
+<main class="auth-shell">
+<section class="auth-intro" aria-labelledby="product-title"><div class="product-brand" dir="ltr"><span class="brand-mark" aria-hidden="true">T</span><span>Triage</span></div>
+<h1 id="product-title">مسیر روشن‌تر برای پذیرش و گفت‌وگو</h1><p>ثبت شرح حال، هماهنگی درخواست ویزیت و گفت‌وگوی بیمار و پزشک، در یک فضای منظم.</p>
+<ul class="auth-features"><li><strong>اطلاعات، مرحله به مرحله</strong><span>شرح حال و مرور پاسخ‌ها پیش از تأیید نهایی.</span></li><li><strong>ارتباط در یک گفت‌وگو</strong><span>پیگیری درخواست و ادامهٔ مکالمه با پزشک پذیرنده.</span></li><li><strong>فضای کاری هر نقش</strong><span>پذیرش بیمار، ابزار پزشک و بررسی حساب‌ها توسط مدیر.</span></li></ul>
+<p class="auth-note">این پروژه برای داده‌های نمونه است؛ برای استفاده از اطلاعات واقعی بیمار آماده نیست. هیچ دادهٔ نمونه‌ای نمایندهٔ بیمار یا پزشک واقعی نیست.</p></section>
+<section class="auth-card" aria-labelledby="auth-title"><h2 id="auth-title">به Triage خوش آمدید</h2><p class="muted">برای ادامه وارد حساب خود شوید یا حساب جدید بسازید.</p>
+<nav class="auth-tabs" aria-label="ورود یا ثبت‌نام">
 <button id="login-tab" type="button" aria-pressed="true">ورود</button>
 <button id="register-tab" type="button" aria-pressed="false">ثبت‌نام</button>
 </nav>
-<form id="auth-form" class="panel">
-<label for="username">نام کاربری آزمایشی</label>
+<form id="auth-form" >
+<label for="username">نام کاربری</label>
 <input id="username" autocomplete="username" required minlength="3" maxlength="32" pattern="[a-zA-Z0-9_.-]{3,32}" dir="ltr" aria-describedby="username-help">
 <p id="username-help" class="muted">۳ تا ۳۲ حرف انگلیسی، عدد، نقطه، خط تیره یا زیرخط.</p>
 <label for="password">گذرواژه</label>
 <input id="password" type="password" autocomplete="current-password" required minlength="8" maxlength="128">
 <fieldset id="registration" hidden disabled>
 <label for="role">نوع حساب</label>
-<select id="role"><option value="patient">بیمار آزمایشی</option><option value="doctor">پزشک آزمایشی</option></select>
+<select id="role"><option value="patient">بیمار</option><option value="doctor">پزشک</option></select>
 <fieldset id="doctor-fields" hidden disabled>
-<label for="name-fa">نام نمایشی فرضی</label><input id="name-fa" minlength="2" maxlength="60" required autocomplete="off">
+<label for="name-fa">نام نمایشی</label><input id="name-fa" minlength="2" maxlength="60" required autocomplete="off">
 <label for="license-number">شماره نظام پزشکی</label><input id="license-number" required minlength="4" maxlength="20" pattern="[A-Za-z0-9-]{4,20}" dir="ltr" autocomplete="off" aria-describedby="license-help">
-<p id="license-help" class="muted">فقط شماره نظام پزشکی ساختگی وارد کنید؛ ۴ تا ۲۰ حرف انگلیسی، عدد یا خط تیره. شماره‌ها در این دمو راستی‌آزمایی نمی‌شوند.</p>
+<p id="license-help" class="muted">فقط شماره نظام پزشکی ساختگی وارد کنید؛ ۴ تا ۲۰ حرف انگلیسی، عدد یا خط تیره. شماره‌ها راستی‌آزمایی نمی‌شوند.</p>
 <label for="specialty">تخصص</label><select id="specialty" required><option value="">در حال دریافت تخصص‌ها...</option></select>
-<label for="expertise-1">حوزهٔ کاری اول (ساختگی)</label><input id="expertise-1" required minlength="2" maxlength="40" autocomplete="off">
-<label for="expertise-2">حوزهٔ کاری دوم (ساختگی)</label><input id="expertise-2" required minlength="2" maxlength="40" autocomplete="off">
+<label for="expertise-1">حوزهٔ کاری اول</label><input id="expertise-1" required minlength="2" maxlength="40" autocomplete="off">
+<label for="expertise-2">حوزهٔ کاری دوم</label><input id="expertise-2" required minlength="2" maxlength="40" autocomplete="off">
 <label for="expertise-3">حوزهٔ کاری سوم (اختیاری)</label><input id="expertise-3" minlength="2" maxlength="40" autocomplete="off">
 </fieldset></fieldset>
 <p id="error" class="error" role="alert"></p>
 <button id="submit" class="submit" type="submit">ورود</button>
-</form>
+</form><p class="auth-note">از نام واقعی، اطلاعات شخصی یا گذرواژه‌ای که جای دیگری استفاده می‌کنید، استفاده نکنید.</p></section>
 </main>
 <script>
 const form=document.getElementById("auth-form"), username=document.getElementById("username"), password=document.getElementById("password");
@@ -53,6 +46,7 @@ const destination=user=>user.role==="admin"?"/admin":user.role==="doctor"?"/doct
 function mode(value){
   if(busy)return;
   registering=value;
+  document.getElementById("auth-title").textContent=value?"حساب کاربری بسازید":"به Triage خوش آمدید";
   registration.hidden=!value;registration.disabled=!value;
   doctorFields.hidden=!value||role.value!=="doctor";doctorFields.disabled=doctorFields.hidden;
   password.autocomplete=value?"new-password":"current-password";
@@ -67,7 +61,7 @@ function message(status,code){
 }
 form.addEventListener("submit",async event=>{
   event.preventDefault();if(busy)return;
-  busy=true;submit.disabled=true;loginTab.disabled=true;registerTab.disabled=true;errorLine.textContent="";
+  busy=true;form.setAttribute("aria-busy","true");submit.textContent=registering?"در حال ثبت‌نام…":"در حال ورود…";submit.disabled=true;loginTab.disabled=true;registerTab.disabled=true;errorLine.textContent="";
   const body={username:username.value,password:password.value};
   if(registering){
     body.role=role.value;
@@ -89,7 +83,7 @@ form.addEventListener("submit",async event=>{
     }
     location.assign(destination(result.user));
   }catch{errorLine.textContent=message(0);}
-  finally{busy=false;submit.disabled=false;loginTab.disabled=false;registerTab.disabled=false;}
+  finally{busy=false;form.setAttribute("aria-busy","false");submit.textContent=registering?"ثبت‌نام":"ورود";submit.disabled=false;loginTab.disabled=false;registerTab.disabled=false;}
 });
 (async()=>{
   try{

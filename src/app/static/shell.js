@@ -47,7 +47,7 @@ window.Shell = (() => {
     nav.replaceChildren();
     for(const item of items){
       if(item.group){const heading=document.createElement("p");heading.className="nav-group";heading.textContent=item.group;nav.append(heading);continue;}
-      const link=document.createElement("a"),label=document.createElement("strong");link.className="nav-item";link.href=item.hash;link.dataset.navId=item.id;label.textContent=item.label;link.append(label);
+      const link=document.createElement("a"),label=document.createElement("strong");link.className="nav-item";link.href=item.hash;link.dataset.navId=item.id;link.title=item.label;label.textContent=item.label;link.append(label);
       if(item.badge!==undefined){const badge=document.createElement("span");badge.className="nav-badge";badge.textContent=Number(item.badge).toLocaleString("fa-IR");link.append(badge);}
       if(item.secondary){const detail=document.createElement("small");detail.textContent=item.secondary;link.append(detail);}
       if(item.status){const status=document.createElement("span");status.className="status-chip";status.textContent=item.status;link.append(status);}
@@ -62,6 +62,11 @@ window.Shell = (() => {
     let badge=link.querySelector(".nav-badge");if(!badge){badge=document.createElement("span");badge.className="nav-badge";link.append(badge);}badge.textContent=Number(count).toLocaleString("fa-IR");
   }
   function init(config) {
+    const main=byId("shell-main");main.tabIndex=-1;
+    const skip=document.createElement("a");skip.className="skip-link";skip.href="#shell-main";skip.textContent="رفتن به محتوای اصلی";
+    skip.addEventListener("click",event=>{event.preventDefault();main.focus();});document.body.prepend(skip);
+    const brand=document.createElement("span"),mark=document.createElement("span"),word=document.createElement("span");
+    brand.className="product-brand";brand.dir="ltr";mark.className="brand-mark";mark.setAttribute("aria-hidden","true");mark.textContent="T";word.textContent="Triage";brand.append(mark,word);byId("menu-toggle").before(brand);
     options=config;setItems(config.items);initialOpen();
     const closeButton=document.createElement("button");closeButton.type="button";closeButton.className="drawer-close";closeButton.textContent="بستن فهرست";
     closeButton.addEventListener("click",()=>setOpen(false,true));byId("shell-sidebar").prepend(closeButton);
@@ -99,7 +104,7 @@ window.VisitThread = function(options) {
   const scroll=options.scroll;options.logParent.append(log);
   const note=document.createElement("p");note.className="visit-chat-note";note.setAttribute("role","status");
   const label=document.createElement("label"),input=document.createElement("textarea"),error=document.createElement("p"),counter=document.createElement("span"),send=document.createElement("button");
-  input.id="visit-input-"+requestId;input.maxLength=2000;input.rows=2;input.dir="auto";input.placeholder="پیام ساختگی خود را بنویسید...";label.htmlFor=input.id;label.textContent="پیام شما";
+  input.id="visit-input-"+requestId;input.maxLength=2000;input.rows=2;input.dir="auto";input.placeholder="پیام خود را بنویسید…";label.htmlFor=input.id;label.textContent="پیام شما";
   error.id="visit-error-"+requestId;error.className="visit-chat-error";error.setAttribute("role","alert");
   counter.id="visit-count-"+requestId;counter.className="visit-chat-count";input.setAttribute("aria-describedby",counter.id+" "+error.id);
   send.type="button";send.textContent="ارسال پیام";const actions=document.createElement("div");actions.className="visit-chat-actions";actions.append(counter,send);

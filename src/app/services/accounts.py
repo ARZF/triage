@@ -26,7 +26,7 @@ def _user(connection, user_id: str):
 def public_user(user: dict) -> dict:
     return {
         "id": user["id"], "role": user["role"], "username": user["username"],
-        "display_name": user["name_fa"] if user["role"] == "doctor" else "مدیر سیستم" if user["role"] == "admin" else "بیمار آزمایشی",
+        "display_name": user["name_fa"] if user["role"] == "doctor" else "مدیر سیستم" if user["role"] == "admin" else "بیمار",
         "doctor": {
             "verified": bool(user["verified"]), "available": bool(user["available"]),
             "status": user["review_status"], "review_note": user["review_note"],

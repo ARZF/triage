@@ -8,7 +8,7 @@ from typing import get_args
 from app.schemas.triage import SpecialtyCode
 
 DATA_FILE = Path(__file__).resolve().parents[1] / "data" / "doctors.json"
-STATUS = "synthetic demo data, not real doctors"
+STATUS = "fictional seed data, not real doctors"
 
 
 def load_file(path: Path) -> dict:

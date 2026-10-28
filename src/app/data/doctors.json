@@ -1,5 +1,5 @@
 {
-  "status": "synthetic demo data, not real doctors",
+  "status": "fictional seed data, not real doctors",
   "specialties": [
     {
       "code": "general_practice",

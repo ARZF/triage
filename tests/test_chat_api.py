@@ -131,7 +131,8 @@ class ChatApiTests(unittest.TestCase):
         response = self.client.get("/demo")
         self.assertEqual(response.status_code, 200)
         self.assertIn("text/html", response.headers["content-type"])
-        self.assertIn("نسخهٔ نمایشی", response.text)
+        self.assertIn("داده‌ها و حساب‌های نمونه", response.text)
+        self.assertNotIn("نسخهٔ نمایشی", response.text)
         self.assertIn('lang="fa" dir="rtl"', response.text)
         self.assertIn("textContent", response.text)
         self.assertNotIn("innerHTML", response.text)
@@ -318,7 +319,7 @@ class ChatApiTests(unittest.TestCase):
             "medical_history": "none", "medication_history": "none", "food_allergies": "none",
             "additional_context": "",
         })
-        self.assertIn("پایان", state["reply"])
+        self.assertIn("ثبت و تأیید شد", state["reply"])
 
     def test_dropdown_answer_values_complete_intake(self):
         session_id = self.create()["session_id"]

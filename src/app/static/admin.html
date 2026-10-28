@@ -4,21 +4,17 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>مدیریت ثبت‌نام پزشکان</title>
 <style>
-:root{--paper:#f5f5ef;--surface:#fff;--ink:#203b35;--muted:#576b64;--line:#d5ddd5;--accent:#245d48;--tint:#eaf1e9;--danger:#9c2929}
-*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.7 Tahoma,"Segoe UI",sans-serif}
-.banner{padding:10px 16px;background:var(--ink);color:#fff;text-align:center}.shell{max-width:1050px;margin:auto;padding:24px 16px}
-header,.actions,.tabs,.paging{display:flex;gap:12px;align-items:center;flex-wrap:wrap}header{justify-content:space-between}h1{font-size:28px;font-weight:500}h2{font-size:21px;margin:0 0 8px}
-button,textarea{font:inherit;border:1px solid var(--line);border-radius:6px;padding:8px 12px;min-height:44px}button{background:var(--accent);color:white;cursor:pointer}button:disabled{opacity:.5;cursor:default}
-.secondary,.tabs button[aria-pressed=false]{background:var(--surface);color:var(--ink)}.danger{color:var(--danger);background:var(--surface);border-color:var(--danger)}:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
-.tabs{margin:20px 0}.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:20px;margin:16px 0;min-width:0}.card p,.card dd{overflow-wrap:anywhere;white-space:pre-wrap}
-.muted,dt{color:var(--muted);font-size:14px}dl{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}dt{margin:0}dd{margin:4px 0}.chip{display:inline-block;padding:3px 10px;border-radius:16px;background:var(--tint);margin:3px}
-form{padding:16px;background:var(--tint);border-radius:8px;margin-top:16px}label{display:block;margin-bottom:8px}textarea{width:100%;min-height:110px;resize:vertical;color:var(--ink);background:var(--surface)}.counter{margin:4px 0 12px;font-size:14px;color:var(--muted)}.error{color:var(--danger);white-space:pre-wrap}.error:empty{display:none}[hidden]{display:none!important}.paging{justify-content:center;margin:20px 0}
-@media(max-width:600px){h1{font-size:23px}.card{padding:16px}dl{grid-template-columns:minmax(0,1fr)}.actions button{flex:1}.tabs{gap:8px}}
+h2{font-size:var(--text-lg);margin:0 0 var(--space-sm)}
+.actions,.paging{display:flex;gap:var(--space-sm);align-items:center;flex-wrap:wrap}
+#items{max-width:1000px;margin-inline:auto}.card p,.card dd{overflow-wrap:anywhere;white-space:pre-wrap}
+dl{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-md)}dt{color:var(--muted);font-size:var(--text-sm)}dd{margin:4px 0}
+form{padding:var(--space-md);background:var(--tint);border-radius:var(--radius-sm);margin-top:var(--space-md)}label{display:block;margin-bottom:var(--space-sm)}textarea{width:100%;min-height:110px;resize:vertical}.counter{margin:4px 0 12px;font-size:var(--text-xs);color:var(--muted)}.paging{justify-content:center;margin:var(--space-lg) 0}
+@media(max-width:600px){dl{grid-template-columns:minmax(0,1fr)}.actions button{flex:1}}
 </style>
 <link rel="stylesheet" href="/assets/shell.css">
 </head>
-<body><div id="app-layout" class="app-layout sidebar-closed"><div class="banner">دموی آزمایشی — فقط اطلاعات ساختگی</div><header class="topbar"><button id="menu-toggle" type="button" aria-expanded="false" aria-controls="shell-sidebar" aria-label="باز کردن فهرست">فهرست</button><h1 id="shell-title">مدیریت ثبت‌نام پزشکان</h1><span id="display-name" class="display-name"></span><button id="logout" type="button" class="secondary">خروج</button></header><aside id="shell-sidebar"><nav id="shell-nav" aria-label="وضعیت ثبت‌نام و رویدادها"></nav><p id="pending-count" role="status">در حال دریافت تعداد درخواست‌ها...</p></aside><button id="shell-backdrop" type="button" aria-label="بستن فهرست" hidden></button><main id="shell-main">
-<p class="muted">این بخش فقط برای بررسی ثبت‌نام پزشکان است. شماره‌های نظام پزشکی در این دمو ساختگی و راستی‌آزمایی‌نشده‌اند.</p>
+<body><div id="app-layout" class="app-layout sidebar-closed"><div class="banner">داده‌ها و حساب‌های نمونه · از درج اطلاعات واقعی و شناسایی بیمار خودداری کنید</div><header class="topbar"><button id="menu-toggle" type="button" aria-expanded="false" aria-controls="shell-sidebar" aria-label="باز کردن فهرست">فهرست</button><h1 id="shell-title">مدیریت ثبت‌نام پزشکان</h1><span id="display-name" class="display-name"></span><button id="logout" type="button" class="secondary">خروج</button></header><aside id="shell-sidebar"><nav id="shell-nav" aria-label="وضعیت ثبت‌نام و رویدادها"></nav><p id="pending-count" role="status">در حال دریافت تعداد درخواست‌ها...</p></aside><button id="shell-backdrop" type="button" aria-label="بستن فهرست" hidden></button><main id="shell-main">
+<p class="muted">این بخش فقط برای بررسی ثبت‌نام پزشکان است. شماره‌های نظام پزشکی نمونه‌اند و راستی‌آزمایی نشده‌اند.</p>
 
 <p id="error" class="error" role="alert"></p><p id="status" role="status">در حال دریافت...</p>
 <section id="items" aria-label="فهرست بررسی پزشکان"></section>

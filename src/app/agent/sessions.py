@@ -7,7 +7,7 @@ from uuid import uuid4
 from app.core import db
 from app.core.errors import ServiceError
 from app.agent import dictionaries
-from app.agent.intake import PROFILE_FIELDS, PROFILE_WELCOME, QUESTIONS, Collected, IntakeState, advance, profile_state
+from app.agent.intake import LEGACY_PROFILE_WELCOME, PROFILE_FIELDS, PROFILE_WELCOME, QUESTIONS, Collected, IntakeState, advance, profile_state
 from app.services import doctors, visits
 
 REDACTED_MESSAGE = "متن این پیام به‌دلیل توقف اضطراری ذخیره نشده است."
@@ -53,11 +53,13 @@ def _values(state: IntakeState) -> dict:
 
 
 def _read(connection: sqlite3.Connection, session_id: str) -> sqlite3.Row:
-    # ponytail: the initial welcome prefix records prefill without another schema column; migrate to an explicit creation flag before changing that prefix.
+    # ponytail: current/legacy welcome prefixes record prefill; use an explicit creation flag before another format change.
     row = connection.execute(
-        """SELECT s.*, ((SELECT content FROM messages WHERE session_id=s.id ORDER BY id LIMIT 1) LIKE ?)
-            AS "returning" FROM sessions s WHERE s.id=?""",
-        (PROFILE_WELCOME + "%", session_id),
+        """SELECT s.*, (m.content LIKE ? OR m.content LIKE ?) AS "returning"
+            FROM sessions s LEFT JOIN messages m ON m.id=(
+                SELECT id FROM messages WHERE session_id=s.id ORDER BY id LIMIT 1)
+            WHERE s.id=?""",
+        (PROFILE_WELCOME + "%", LEGACY_PROFILE_WELCOME + "%", session_id),
     ).fetchone()
     if row is None:
         raise KeyError(session_id)

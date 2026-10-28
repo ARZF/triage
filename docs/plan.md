@@ -14,7 +14,7 @@ at a time, with an explicit API contract and a runnable check for its behavior.
 - `GET /health` returns HTTP 200 with JSON `{"status": "ok"}`.
 - The health endpoint checks application responsiveness only.
 - FastAPI exposes interactive API documentation at `/docs`.
-- The app implements scripted intake, JSON vocabulary, SQLite patient memory, optional AI specialty triage, demo accounts, broadcast visits and direct text chat with the accepting doctor; no patient-facing diagnosis, prescription or appointment scheduling.
+- The app implements scripted intake, JSON vocabulary, SQLite patient memory, optional AI specialty triage, fictional-data accounts, broadcast visits and direct text chat with the accepting doctor; no patient-facing diagnosis, prescription or appointment scheduling.
 - The expanded Persian intake includes height/weight, main complaint, disease/medication histories and food/drug allergies, with multi-item symptom and medicine editors. Schema v4 adds nullable columns without resetting version-3 data.
 - Schema v5 adds optional doctor-only context, explicitly excluded from current/prior provider inputs. Final review is an inline Persian card with validated field-specific corrections before confirmation.
 - Schema v6 adds visit end timestamps and indexed direct messages. Patient request/message polling is read-only; the doctor alone ends an accepted visit without removing its history.
@@ -385,6 +385,19 @@ Complete this section for each agreed feature before writing its code:
 - **Demo:** reuse forest tokens, responsive layout and synthetic banner. Doctor/assistant bubbles, labeled multiline composer (Enter sends, Shift+Enter newline), Send/Stop/New Chat, clear loading/errors and «پاسخ هوش مصنوعی پیشنهادی است و نیاز به بررسی پزشک دارد.» Render textContent only.
 - **Acceptance examples:** first answer streams; follow-up includes only this chat's completed turns; navigation aborts while retaining completed history; New Chat/reload clears it; unverified doctors cannot call it; unavailable login/runtime displays a safe failure without affecting existing dashboard/heartbeat.
 - **Runnable check:** baseline/final full unittest suites; new mocked-protocol checks for validation/access/isolation/ephemeral streaming/failures/cancellation/deadline/cleanup/concurrency/privacy; desktop/mobile browser checks and a synthetic live Codex check only if a dedicated login is available. Report all unverified behavior. Do not commit or push.
+
+### Feature: public-portfolio interface polish
+
+- **Status:** approved (2026-10-28).
+- **User outcome:** a consistent, accessible Persian Triage interface and accurate public repository presentation, without implying clinical or production readiness.
+- **Scope:** polish existing login/patient/doctor/admin pages in place using the forest palette, shared CSS tokens and vanilla JavaScript. Remove user-facing demo branding, preserve fictional-data notices, API routes/bodies/auth/validation and clinical scope. No new application folders/dependencies, commits or publishing.
+- **API contract:** endpoints and wire shapes unchanged; product-facing account/intake copy may change. Preserve recognition of legacy returning-profile welcome messages without rewriting stored history or changing schema v8. Retain /demo, APP_DEMO_DOCTOR_PASSWORD and seed identifiers for compatibility.
+- **Validation:** preserve all current rules. Improve form labels, keyboard/focus feedback, loading/empty/error/success states and mobile layout. Use textContent; no external fonts/CDNs or fake features.
+- **Access and data handling:** retain access controls and fictional-data labels. Review tracked files/history for exposed credentials without printing values; leave ignored local configuration/databases and Git history untouched. Add relevant ignore patterns and document genuine release limitations.
+- **Design:** docs/design.md records the shared modern-minimal workbench, forest tokens, system typography, spacing and state rules. Reuse shell.css for login and dashboards rather than adding a framework or duplicating global styles.
+- **Failure behavior:** existing safe API errors and manual retry behavior remain; narrow screens, long text, keyboard navigation and busy states stay usable.
+- **Acceptance examples:** register/login, full patient intake/review/request, doctor review/profile/assistant/chat, admin paging/review and mobile navigation work with the same backend; new and legacy returning conversations are recognized; no visible demo branding or invented production claims.
+- **Runnable check:** baseline/final unittest suites, JavaScript/HTML/CSS checks, wheel packaging/asset checks (there is no separate frontend build), publication scan, and real-browser responsive/workflow checks using fictional data. Report unverified integrations and release prerequisites.
 
 ## 6. Coding and verification rules
 
@@ -1214,3 +1227,58 @@ environment and process intact; restart it from the same configured PowerShell
 window to load the correction. Changes: agent/doctor_assistant.py,
 tests/test_assistant.py, README.md, docs/plan.md and docs/changelog.md. No commit
 or push.
+
+## 25. Public-portfolio interface polish (2026-10-28)
+
+Implemented the approved section-5 feature with the existing static stack and
+forest identity. Shared shell.css now owns the login/dashboard tokens, controls,
+navigation icons, focus states and responsive surfaces; previously undefined
+spacing tokens and duplicated page globals were corrected. Added keyboard skip
+links, login busy feedback and product-oriented Persian copy. The compact
+fictional-data notice remains visible; nothing implies real clinical readiness.
+
+README setup no longer suggests deleting existing databases. Configuration and
+publication notes describe environment loading, compatibility names, licensing
+and real-deployment limitations. .gitignore covers local logs, alternate SQLite
+files/journals and auth.json. docs/design.md records the visual conventions.
+No dependencies, application folders, schema versions, API routes, authentication
+rules or wire shapes changed. Historical stored messages are not rewritten.
+The current and prior welcome prefixes both identify returning conversations.
+
+Verification:
+- Before: .\.venv\Scripts\python.exe -m unittest discover tests:
+  Ran 203 tests in 96.315s, OK.
+- Initial full run after changes: 207 tests in 138.198s, one failure: an old
+  completion-word assertion. Updated that assertion to the new confirmation copy.
+- Final same full command: Ran 207 tests in 105.837s, OK. Four added checks cover
+  historical returning-session compatibility, page markup/copy, defined CSS
+  tokens and keyboard/busy-state wiring.
+- JavaScript syntax: Node --check for shell.js and vm.Script parsing of every
+  inline page script passed. No frontend linter/formatter or npm build exists.
+- pip wheel --no-deps built healthcare_agent-0.1.0-py3-none-any.whl with the
+  expected six HTML/CSS/JS assets and no local secrets/database artifacts.
+  An initial no-build-isolation attempt lacked setuptools; the normal isolated
+  build succeeded using the existing declared build requirement.
+- Real Uvicorn on port 8002 with a temporary database: /health, /docs, /login,
+  /doctor, /demo, /admin and both shared assets returned 200.
+- Browser: login error/busy/success, expanded doctor registration, full patient
+  intake, multiple symptoms/medicines, skipped optional context, age correction,
+  confirmation, unconfigured-provider fallback, visit request/acceptance,
+  two-way direct messages and visit ending worked. Checked doctor profile and
+  assistant unavailable/manual retry feedback; admin pending/audit/empty views.
+  Responsive checks at 320/375/414/768px plus desktop showed no root horizontal
+  overflow. Mobile drawer Escape returned focus to its toggle; patient profile
+  and conversation remained usable. Screenshots saved outside the repository.
+- Publication review: no high-confidence credential-pattern matches in tracked
+  files or 276 historical text blobs; no tracked local environment/auth/database/
+  log/bytecode artifacts. This pattern scan is not an exhaustive security audit.
+  Remaining demo strings are compatibility routes/config/IDs, the old welcome
+  marker, historical specifications or synthetic test infrastructure.
+
+Before public reuse, choose a license; none is present. Before real deployment,
+resolve the documented security, privacy and clinical-review prerequisites.
+Live AI services/answer quality, real mobile keyboards, screen-reader behavior,
+password changes, account deletion and all admin mutations were not exercised
+in this browser pass; existing automated tests cover their server contracts.
+The operator's port-8000 server, .env, credentials and application database were
+left untouched. No commit, push, publication or Git-history changes.

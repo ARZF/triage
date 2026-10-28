@@ -6,28 +6,30 @@ from typing import Literal
 AnswerField = Literal["age", "height_cm", "weight_kg", "chief_complaint", "symptoms", "duration", "severity", "medical_history", "medications", "medication_history", "food_allergies", "allergies", "additional_context"]
 Step = Literal["profile", "confirm", AnswerField]
 QUESTIONS = {
-    "age": "سن بیمار فرضی چند سال است؟ (۰ تا ۱۲۰)",
-    "height_cm": "قد بیمار فرضی چند سانتی‌متر است؟",
-    "weight_kg": "وزن بیمار فرضی چند کیلوگرم است؟",
-    "chief_complaint": "شکایت اصلی بیمار فرضی و دلیل مراجعه چیست؟",
-    "symptoms": "بیمار فرضی چه علائمی دارد؟",
+    "age": "سن بیمار چند سال است؟ (۰ تا ۱۲۰)",
+    "height_cm": "قد بیمار چند سانتی‌متر است؟",
+    "weight_kg": "وزن بیمار چند کیلوگرم است؟",
+    "chief_complaint": "شکایت اصلی بیمار و دلیل مراجعه چیست؟",
+    "symptoms": "بیمار چه علائمی دارد؟",
     "duration": "این علائم از چه زمانی شروع شده‌اند؟",
     "severity": "شدت علائم از ۱ تا ۱۰ چقدر است؟",
-    "medical_history": "بیمار فرضی چه سابقهٔ بیماری دارد؟ اگر ندارد، بنویسید «ندارد».",
-    "medications": "داروهایی که مصرف می‌کنید را برای بیمار فرضی وارد کنید. اگر دارویی مصرف نمی‌کند، بنویسید «هیچ».",
-    "medication_history": "سابقهٔ مصرف داروی بیمار فرضی چیست؟ داروهای قبلی را بنویسید؛ اگر ندارد، بنویسید «ندارد».",
-    "food_allergies": "بیمار فرضی چه حساسیت غذایی دارد؟ اگر ندارد، بنویسید «ندارد».",
-    "allergies": "بیمار فرضی چه حساسیت دارویی یا سایر حساسیت‌هایی دارد؟ اگر ندارد، بنویسید «ندارد».",
+    "medical_history": "بیمار چه سابقهٔ بیماری دارد؟ اگر ندارد، بنویسید «ندارد».",
+    "medications": "داروهایی که مصرف می‌کنید را برای بیمار وارد کنید. اگر دارویی مصرف نمی‌کند، بنویسید «هیچ».",
+    "medication_history": "سابقهٔ مصرف داروی بیمار چیست؟ داروهای قبلی را بنویسید؛ اگر ندارد، بنویسید «ندارد».",
+    "food_allergies": "بیمار چه حساسیت غذایی دارد؟ اگر ندارد، بنویسید «ندارد».",
+    "allergies": "بیمار چه حساسیت دارویی یا سایر حساسیت‌هایی دارد؟ اگر ندارد، بنویسید «ندارد».",
     "additional_context": "آیا توضیح دیگری دربارهٔ خودتان دارید که پزشک بداند؟ نوشتن این بخش اختیاری است و برای هوش مصنوعی ارسال نمی‌شود. اگر توضیحی ندارید، «رد کردن» را بزنید.",
     "confirm": "اطلاعات ثبت‌شده رو بررسی کردید؟ همه موارد درسته؟",
 }
 STEPS = tuple(QUESTIONS)
 QUESTIONS["profile"] = "آیا سن، قد، وزن، سوابق، داروها و حساسیت‌های قبلی همچنان درست هستند؟ «بله» یا «خیر» بنویسید."
 PROFILE_FIELDS = ("age", "height_cm", "weight_kg", "medical_history", "medications", "medication_history", "food_allergies", "allergies")
-WELCOME = "خوش آمدید! این یک نسخهٔ نمایشی است؛ فقط از داده‌های ساختگی استفاده کنید. نام یا اطلاعات شناسایی وارد نکنید."
-PROFILE_WELCOME = "خوش آمدید! اطلاعات قبلی شما در این نسخهٔ نمایشی: "
-EMERGENCY_REPLY = "لطفاً همین حالا با خدمات اورژانس محل خود تماس بگیرید. این نسخهٔ نمایشی نمی‌تواند کمک اضطراری ارائه کند."
-COMPLETE_REPLY = "ثبت اطلاعات ساختگی به پایان رسید. این نسخهٔ نمایشی تشخیص یا توصیهٔ درمانی ارائه نمی‌کند."
+WELCOME = "به Triage خوش آمدید. برای شروع، چند پرسش را پاسخ دهید. فقط از داده‌های ساختگی استفاده کنید و نام یا اطلاعات شناسایی وارد نکنید."
+PROFILE_WELCOME = "خوش آمدید! اطلاعات ثبت‌شدهٔ قبلی شما: "
+# Compatibility marker only: recognize existing conversations without rewriting their stored messages.
+LEGACY_PROFILE_WELCOME = "خوش آمدید! اطلاعات قبلی شما در این نسخهٔ نمایشی: "
+EMERGENCY_REPLY = "لطفاً همین حالا با خدمات اورژانس محل خود تماس بگیرید. این سامانه نمی‌تواند کمک اضطراری ارائه کند."
+COMPLETE_REPLY = "اطلاعات ثبت و تأیید شد. پیشنهاد تخصص جایگزین تشخیص یا توصیهٔ درمانی پزشک نیست."
 # ponytail: starter substring list needs clinical review; replace with clinically reviewed screening before clinical use.
 RED_FLAGS = (
     "chest pain", "trouble breathing", "difficulty breathing", "shortness of breath",

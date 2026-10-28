@@ -1,43 +1,51 @@
 # Healthcare Agent
 
-Synthetic-data FastAPI demo with scripted Persian intake, vocabulary matching,
-optional AI specialty triage, patient/doctor login and broadcast visit requests.
-Accepted patients and doctors can exchange direct text messages. Authentication
-is demo-grade. Administrators review doctor registrations without patient-data
-access; there is no prescription or appointment booking.
+Triage is a Persian, right-to-left healthcare workflow application built with
+FastAPI, SQLite and dependency-free browser interfaces. It connects structured
+patient intake, specialty suggestions, visit requests and doctor–patient chat,
+with role-specific dashboards, account profiles and an independent doctor AI chat.
+Administrators review doctor registrations without access to patient records.
 
-## Setup and the Slice 4 breaking update
+**Portfolio project for fictional data.** Seed clinicians and public examples are
+explicitly fictional. The application is not clinically validated or ready for
+real patient information. Prescription and appointment booking are not implemented.
+
+## Quick start
 
 Requires Python 3.14 or later. From the repository root in PowerShell:
 
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -e .
+Copy-Item .env.example .env
 ```
 
-For databases from the old anonymous demo only, stop the server and delete the old disposable
-synthetic database once, or select a fresh APP_DB_PATH. Old anonymous visits
-have no account ownership and are not migrated into accounts. Keep any data
-you need before resetting. The application never deletes the database for you.
-Existing schema-v3 through v7 databases upgrade automatically to schema v8;
-keep those databases when updating the intake or adding visit chat.
+Set optional administrator/provider settings in the ignored `.env`; never commit
+credentials. With `uv` available, load it into the existing virtual environment:
 
 ```powershell
-# Run once only for the old disposable demo database, with the server stopped:
-if (Test-Path -LiteralPath .\healthcare_agent.db) {
-    Remove-Item -LiteralPath .\healthcare_agent.db
-}
-$env:APP_ADMIN_USERNAME = "admin_demo"
-$env:APP_ADMIN_PASSWORD = "synthetic-admin-password" # Demo only, 12–128 characters.
-Remove-Item Env:APP_DOCTOR_AUTO_VERIFY -ErrorAction SilentlyContinue
+uv run --no-project --env-file .env .\.venv\Scripts\python.exe -m uvicorn app.main:app --app-dir src
+```
+
+Alternatively, set environment variables in PowerShell and run:
+
+```powershell
 .\.venv\Scripts\python.exe -m uvicorn app.main:app --app-dir src
 ```
 
-Open [login](http://127.0.0.1:8000/login), [patient demo](http://127.0.0.1:8000/demo),
-[doctor dashboard](http://127.0.0.1:8000/doctor), [admin panel](http://127.0.0.1:8000/admin),
-or [API docs](http://127.0.0.1:8000/docs).
+The application reads the process environment and does not load `.env` itself.
+Open [login](http://127.0.0.1:8000/login),
+[patient workspace](http://127.0.0.1:8000/demo),
+[doctor dashboard](http://127.0.0.1:8000/doctor),
+[admin panel](http://127.0.0.1:8000/admin) or [API docs](http://127.0.0.1:8000/docs).
+The patient URL `/demo` is retained for compatibility; it is not a separate mode.
 
-## Accounts and the demo workflow
+Existing schema-v3 through v7 databases upgrade automatically to schema v8.
+Keep existing databases; do not delete them as part of normal setup. The old
+anonymous pre-account format is not migrated into owned accounts; see the
+historical implementation notes in docs/plan.md before upgrading one.
+
+## Accounts and workflow
 
 Use invented usernames, display names, passwords and intake answers only.
 Do not use real names, personal information or a password used elsewhere.
@@ -46,13 +54,13 @@ Both patients and doctors self-register. Usernames are lowercased ASCII,
 are 8-128 characters. Doctor registration also needs a fictional display
 name, a specialty, two or three short expertise phrases and a unique synthetic
 license_number: 4–20 ASCII letters/digits/hyphens, stripped. Missing/invalid
-licenses return 422; duplicates return 409 license_unavailable. These demo
-numbers are fake and unverified; this is not real license verification.
+licenses return 422; duplicates return 409 license_unavailable. These sample
+numbers are fictional and unverified; this is not real license verification.
 The signup and admin pages label this field «شماره نظام پزشکی»; the API/storage
-name remains license_number, with the same synthetic-demo validation.
+name remains license_number, with the same synthetic-data validation.
 
 Doctor accounts start unverified unless APP_DOCTOR_AUTO_VERIFY=true at
-registration. APP_DOCTOR_AUTO_VERIFY=true is a local-demo shortcut that skips
+registration. APP_DOCTOR_AUTO_VERIFY=true is a development shortcut that skips
 admin review for new registrations; it does not approve existing doctors.
 Pending, rejected and suspended doctors may log in and see their own status
 and review note, and edit their own profile/password, but have no queue/patient UI,
@@ -171,7 +179,7 @@ sessions, intakes, messages, triage results and requests and clears the cookie.
 
 ## Triage and visit requests
 
-After a non-emergency intake, the demo calls the triage endpoint automatically.
+After a non-emergency intake, the patient interface calls the triage endpoint automatically.
 It shows specialty, urgency, optional reason, a fixed suggestion-not-diagnosis
 notice and up to ten verified doctors, ordered online first, score descending
 (NULL last), then name. New doctors have no score; the page shows «بدون امتیاز».
@@ -482,11 +490,11 @@ The optional uv command above loads .env before launch. See .env.example.
 Invalid new settings raise ValueError naming only the variable. Example:
 
 ```powershell
-$env:APP_COOKIE_SECURE = "false" # Local HTTP demo only.
+$env:APP_COOKIE_SECURE = "false" # Local HTTP only.
 $env:APP_SESSION_TTL_HOURS = "12"
 $env:APP_REQUEST_TTL_MINUTES = "30"
 $env:APP_DOCTOR_AUTO_VERIFY = "true"
-$env:APP_DEMO_DOCTOR_PASSWORD = "synthetic-demo-password"
+$env:APP_DEMO_DOCTOR_PASSWORD = "synthetic-seed-password"
 .\.venv\Scripts\python.exe -m uvicorn app.main:app --app-dir src
 ```
 
@@ -494,7 +502,7 @@ doctors.json is seed data only: nine specialties and twelve fictional doctors.
 Startup validates/upserts seed data, preserving linked users, their edited name,
 specialty/expertise and review state. Scores remain seed-managed. Optional seed
 accounts use usernames equal to JSON ids, e.g. demo_doctor_1 and demo_doctor_2.
-Setting the demo password creates/refreshes those account hashes. Without it,
+Setting the seed-account password creates/refreshes those account hashes. Without it,
 no seed accounts are created and seed account login/session use is disabled;
 existing account/link rows are preserved. Seed presence resets offline at startup
 until a verified account sends a heartbeat. Self-registered doctors are stored in SQLite, not JSON.
@@ -519,7 +527,7 @@ Text is capped at 500 characters; identifiers, transcripts and additional_contex
 are excluded. The accepting doctor's note projection retains the full note.
 Doctor-only AI summary/considerations are never in patient triage responses.
 
-## Storage, vocabulary and demo limits
+## Storage, vocabulary and limitations
 
 SQLite schema version 8 keeps the accounts, expanded intake and optional context,
 adds nullable visit_requests.ended_at and an indexed visit_messages table through
@@ -543,7 +551,7 @@ migration tooling when migrations grow. SQLite files/journals are ignored by Git
 Passwords use salted scrypt (n=16384, r=8, p=1), constant-time digest comparison
 and dummy verification for unknown users. Tokens use secrets.token_urlsafe(32);
 only SHA-256 hashes are stored. Cookies use HttpOnly, SameSite=Lax, Path=/,
-TTL Max-Age and optional Secure. SameSite=Lax is this demo's CSRF defense.
+TTL Max-Age and optional Secure. SameSite=Lax is the current CSRF defense.
 Login failures throttle per lowercase username: five failures in fifteen minutes,
 429 with Retry-After, success clears failures. This in-memory throttle is bounded
 to 10000 keys and applies per process. Presence uses SQLite and polling.
@@ -590,7 +598,7 @@ phrases and preserves first-appearance order. Catalog search uses substrings.
 - src/app/schemas/: explicit request/response models.
 - src/app/data/: starter vocabulary and seed doctors.
 - src/app/static/: index.html, doctor.html and admin.html share shell.css/shell.js;
-  login.html remains self-contained. CSS/JS/HTML are packaged with the app.
+  login.html uses the same shared design tokens. CSS/JS/HTML are packaged with the app.
 - tests/: unittest checks, TestClient registration/login helper and temporary DBs.
 - docs/plan.md and docs/changelog.md: approved contracts and change history.
 
@@ -601,3 +609,24 @@ phrases and preserves first-appearance order. Catalog search uses substrings.
 Tests use synthetic data and temporary databases; provider requests are mocked.
 The installed Starlette/httpx deprecation warning remains. For browser verification,
 use separate private contexts so the three accounts have separate cookie jars.
+
+## Public repository checklist
+
+- `.env`, SQLite data/journals, authentication caches, local logs, virtual
+  environments and build outputs are ignored. `.env.example` contains placeholders.
+- Keep `/demo`, `APP_DEMO_DOCTOR_PASSWORD`, seed IDs such as `demo_doctor_1`
+  and historical specifications for compatibility. These are technical identifiers,
+  not current interface branding. Test fixtures remain explicitly synthetic.
+- The prior returning-profile welcome prefix remains a read-only compatibility
+  marker. New copy does not rewrite existing patient history or change schema v8.
+- Before any real deployment, address the documented authentication hardening,
+  CSRF protections beyond SameSite, transport/at-rest protection, consent,
+  retention, audit, provider agreements and clinical review. UI polish does not
+  establish security, compliance or clinical readiness.
+- Choose an appropriate license before granting reuse rights publicly. This
+  repository currently does not include a license; no licensing terms are assumed.
+
+The frontend is static HTML/CSS/JavaScript: there is no npm build, linter or
+formatter configured. Verify JavaScript syntax and the unittest suite; the
+production packaging check is a Python wheel containing the local static assets.
+The shared visual specification is in docs/design.md.

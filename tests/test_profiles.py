@@ -136,6 +136,19 @@ class ProfileTests(unittest.TestCase):
         self.patient.post(f"/v1/chat/sessions/{state['session_id']}/messages", json={"message": "no"})
         self.assertTrue(self.patient.get(f"/v1/chat/sessions/{state['session_id']}").json()["session"]["returning"])
 
+    def test_legacy_welcome_remains_returning_after_copy_update(self):
+        from app.agent.intake import LEGACY_PROFILE_WELCOME, PROFILE_WELCOME
+        self.patient.patch("/v1/patient/profile", json=FULL)
+        state = self.patient.post("/v1/chat/sessions").json()
+        self.assertTrue(state["reply"].startswith(PROFILE_WELCOME))
+        self.assertNotIn("نمایشی", state["reply"])
+        with closing(db.connect()) as connection, connection:
+            connection.execute("UPDATE messages SET content=? WHERE id=(SELECT MIN(id) FROM messages WHERE session_id=?)",
+                               (LEGACY_PROFILE_WELCOME + "اطلاعات نمونه", state["session_id"]))
+        restored = self.patient.get(f"/v1/chat/sessions/{state['session_id']}").json()
+        self.assertTrue(restored["session"]["returning"])
+        self.assertTrue(restored["transcript"][0]["content"].startswith(LEGACY_PROFILE_WELCOME))
+
     def test_completion_upsert_stale_intake_guard_and_emergency_no_op(self):
         self.complete()
         state = self.patient.post("/v1/chat/sessions").json()

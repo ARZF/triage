@@ -119,6 +119,16 @@ move them into a dated version section when a release is made.
 
 ### Changed
 
+- Refine the Persian Triage login and role dashboards with one forest design
+  system, responsive layouts, consistent controls, keyboard skip links and
+  clearer busy/empty/error states. Remove duplicated global page styles and
+  define previously missing spacing tokens.
+- Replace current demo/test-version branding with product copy while retaining
+  fictional-data notices and unchanged legacy routes/configuration/seed IDs.
+  Recognize both welcome prefixes so existing returning sessions stay intact.
+- Refresh public setup/limitations documentation and ignore local authentication
+  caches, logs and alternate SQLite filenames; no readiness or compliance claims.
+
 - New intakes prefill from saved complete profiles; profile edits preserve past
   sessions/history/provider contexts. Doctor identity edits follow explicit
   re-review/active-visit rules; suspended profiles stay locked.

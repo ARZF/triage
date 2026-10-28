@@ -13,8 +13,6 @@
     .field { border-top: 1px solid var(--line); padding: 12px 0; }
     dt { font-size: 13px; color: var(--muted); }
     dd { margin: 4px 0 0; overflow-wrap: anywhere; white-space: pre-wrap; }
-    .matches { display: flex; gap: var(--space-sm); flex-wrap: wrap; }
-    .matches:empty { display: none; }
     .chip { background: var(--tint); border: 1px solid var(--line); border-radius: 16px; padding: 4px 12px; font-size: 14px; overflow-wrap: anywhere; }
     .vocabulary-note { margin-top: var(--space-md); }
     footer { margin-top: var(--space-md); }
@@ -25,7 +23,6 @@
     [hidden] { display: none !important; }
     textarea { resize: vertical; min-height: 120px; line-height: 1.8; }
     .compose:has(textarea:not([hidden])) { flex-wrap: wrap; }
-    .secondary { color: var(--accent); background: var(--surface); border-color: var(--line); }
     #note-help { color: var(--muted); font-size: 14px; margin: 0 0 var(--space-md); }
     #edit-cancel { margin-top: var(--space-sm); }
     .review-card { flex-shrink: 0; align-self: stretch; min-width: 0; padding: var(--space-lg); border: 1px solid var(--line); border-radius: 16px; background: var(--surface); color: var(--ink); }
@@ -60,9 +57,9 @@
     @media (max-width: 480px) { .review-card { padding: var(--space-md); } .review-fields { grid-template-columns: minmax(0, 1fr); } .review-actions { flex-direction: column; align-items: stretch; } }
 
 
-#choice-help,#note-help{font-size:13px;color:var(--muted);margin:4px 0 8px}#delete-account{color:var(--danger);background:var(--surface);border-color:var(--danger)}.review-transcript>div{display:flex;flex-direction:column;gap:16px;padding-block:12px}.field{border-block-start:1px solid var(--line);padding-block:10px}#returning-note{padding:12px;background:var(--tint);border-radius:8px}#error{color:var(--danger);margin:4px 0}#error:empty{display:none}.review-card{padding:20px}#answer-choice{margin-block-end:8px}</style></head>
+#returning-note{padding:var(--space-md);background:var(--tint);border-radius:var(--radius-sm)}#error{color:var(--danger);margin:4px 0}#error:empty{display:none}#answer-choice{margin-block-end:var(--space-sm)}</style></head>
 <body><div id="app-layout" class="app-layout sidebar-closed">
-<div class="banner">نسخهٔ نمایشی — فقط داده‌های ساختگی</div>
+<div class="banner">داده‌ها و حساب‌های نمونه · از درج اطلاعات واقعی و شناسایی بیمار خودداری کنید</div>
 <header class="topbar"><button id="menu-toggle" type="button" aria-expanded="false" aria-controls="shell-sidebar" aria-label="باز کردن فهرست">فهرست</button><h1 id="shell-title">پذیرش بیمار</h1><span id="display-name" class="display-name"></span><button id="logout" type="button" class="secondary">خروج</button></header>
 <aside id="shell-sidebar"><button id="reset" type="button">گفت‌وگوی جدید</button><nav id="shell-nav" aria-label="گفت‌وگوهای بیمار"></nav></aside>
 <button id="shell-backdrop" type="button" aria-label="بستن فهرست" hidden></button>
@@ -70,7 +67,7 @@
 <section class="thread-card"><h2>پروفایل سلامت من</h2><p class="muted">فقط اطلاعات ساختگی وارد کنید. تغییرات برای ارزیابی‌های جدید است و گفت‌وگوهای قبلی را تغییر نمی‌دهد. این فرم غربالگری علائم اضطراری انجام نمی‌دهد.</p><p id="profile-empty" class="muted" hidden>پروفایل شما هنوز کامل نیست. می‌توانید اطلاعات را به‌تدریج ذخیره کنید؛ پس از تکمیل همهٔ موارد، ارزیابی جدید با مرور این اطلاعات شروع می‌شود.</p><p id="profile-load" role="status"></p><form id="patient-profile-form" novalidate><div id="profile-fields" class="profile-grid"></div><button id="save-profile" type="submit">ذخیرهٔ پروفایل</button><p id="profile-result" role="status"></p></form></section>
 <section id="password-section" class="thread-card"></section><section class="thread-card danger-section"><h2>حذف حساب و اطلاعات</h2><p>با حذف حساب، تمام ارزیابی‌ها، گفتگوها و پروفایل شما پاک می‌شود. این کار قابل بازگشت نیست.</p><button id="delete-account" type="button">حذف حساب و اطلاعات</button><p id="delete-error" class="error" role="alert"></p></section></section><div class="thread-heading"><span id="status" role="status">در حال شروع...</span></div>
 <div id="thread" class="thread-log" role="log" aria-live="polite" aria-label="پیام‌های گفت‌وگو"><details class="collected-summary thread-card"><summary>اطلاعات ثبت‌شده</summary><p class="muted">نام یا اطلاعات شناسایی وارد نکنید. واژه‌نامهٔ اولیه از نظر بالینی بررسی نشده است.</p><dl id="collected"></dl><div id="matched-symptoms" class="matches" role="list" aria-label="واژه‌های علائم شناسایی‌شده" aria-live="polite"></div><div id="matched-medicines" class="matches" role="list" aria-label="نام داروهای شناسایی‌شده" aria-live="polite"></div></details><p id="returning-note" hidden role="status">مراجعهٔ مجدد — اطلاعات قبلی را بررسی کنید.</p><div id="messages" class="intake-log"></div>        <section id="triage" class="thread-card" hidden aria-labelledby="triage-title">
-          <h2 id="triage-title">پیشنهاد تخصص و پزشکان فرضی</h2>
+          <h2 id="triage-title">پیشنهاد تخصص و پزشکان</h2>
           <p id="triage-status" role="status" aria-live="polite"></p>
           <div id="triage-details"></div>
           <button id="request-visit" type="button" disabled aria-describedby="visit-help">درخواست ویزیت آنلاین</button>
@@ -88,7 +85,7 @@
             <ul id="medicine-list" aria-live="polite"></ul>
           </div>
           <div class="compose">
-            <input id="message" name="message" autocomplete="off" maxlength="2000" required disabled aria-describedby="error" placeholder="پاسخ ساختگی را بنویسید..." dir="auto">
+            <input id="message" name="message" autocomplete="off" maxlength="2000" required disabled aria-describedby="error" placeholder="پاسخ خود را بنویسید…" dir="auto">
             <textarea id="patient-context" maxlength="2000" hidden disabled aria-label="توضیحات تکمیلی برای پزشک (اختیاری)" aria-describedby="note-help error" placeholder="اگر نکتهٔ دیگری هست که دوست دارید پزشک بداند، اینجا بنویسید..." dir="auto"></textarea>
             <button id="add-medicine" type="button" hidden disabled>افزودن</button>
             <button id="send" type="submit" disabled>ارسال</button>
@@ -262,7 +259,7 @@
     function updateVisitButton() {
       const active=currentRequest&&["pending","accepted"].includes(currentRequest.status);
       visitButton.disabled=busy||visitBusy||!lastTriage||lastTriage.emergency||!lastTriage.doctors.some(doctor=>doctor.online)||Boolean(active);
-      visitHelp.textContent=active?"درخواست این گفت‌وگو ثبت شده است.":lastTriage?.emergency?"در وضعیت اورژانسی درخواست ویزیت از این دمو ممکن نیست.":lastTriage&&!lastTriage.doctors.some(doctor=>doctor.online)?"پزشک آنلاینی در فهرست نیست. پس از آنلاین شدن پزشک، پیشنهاد را به‌روزرسانی کنید.":lastTriage?"درخواست برای پزشکان آنلاین این تخصص ارسال می‌شود؛ اولین پزشک آن را می‌پذیرد.":"پس از تکمیل ارزیابی و دریافت پیشنهاد تخصص می‌توانید درخواست بدهید.";
+      visitHelp.textContent=active?"درخواست این گفت‌وگو ثبت شده است.":lastTriage?.emergency?"در وضعیت اورژانسی درخواست ویزیت از این سامانه ممکن نیست.":lastTriage&&!lastTriage.doctors.some(doctor=>doctor.online)?"پزشک آنلاینی در فهرست نیست. پس از آنلاین شدن پزشک، پیشنهاد را به‌روزرسانی کنید.":lastTriage?"درخواست برای پزشکان آنلاین این تخصص ارسال می‌شود؛ اولین پزشک آن را می‌پذیرد.":"پس از تکمیل ارزیابی و دریافت پیشنهاد تخصص می‌توانید درخواست بدهید.";
       composerNote.hidden=!current?.done||currentRequest?.status==="accepted";
       composerNote.textContent=currentRequest?.status==="pending"?"در انتظار پذیرش پزشک؛ ارسال پیام پس از پذیرش فعال می‌شود.":current?.emergency?"این پذیرش به دلیل وضعیت اضطراری متوقف شد.":"پذیرش تکمیل شده است؛ پیشنهاد تخصص را بررسی کنید و درخواست ویزیت بدهید.";
     }

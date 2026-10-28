@@ -3,7 +3,7 @@ from contextlib import closing
 from app.core import db
 from app.core.errors import ServiceError
 
-# ponytail: 500 texts per visit and polling suit this demo; add explicit retention and push delivery when needed.
+# ponytail: messages are capped at 500 per visit and use polling; add explicit retention and push delivery when needed.
 MESSAGE_LIMIT = 500
 
 
